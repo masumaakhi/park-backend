@@ -88,6 +88,16 @@ app.use(globalLimiter);
 app.use(express.json());
 app.use(cookieParser());
 
+// Root Welcome & Status
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "EduPark Backend API is running successfully!",
+    status: "healthy",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
