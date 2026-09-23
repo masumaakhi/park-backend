@@ -11,8 +11,9 @@ dist/
 build/
 
 # Uploaded private files
-uploads/
-storage/
+/uploads/
+/storage/
+!src/modules/uploads/
 
 # Logs
 *.log
