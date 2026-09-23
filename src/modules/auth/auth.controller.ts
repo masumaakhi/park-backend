@@ -30,7 +30,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       res.cookie('admin_jwt', token, cookieOpts);
     }
 
-    res.status(200).json(new ApiResponse(true, 'Login successful', { user }));
+    res.status(200).json(new ApiResponse(true, 'Login successful', { user, token }));
   } catch (error) {
     next(error);
   }

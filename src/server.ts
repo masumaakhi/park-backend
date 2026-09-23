@@ -42,21 +42,30 @@ import rateLimit from 'express-rate-limit';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? [
-      'https://tista.org',
-      'https://educationalpark.tista.org',
-      'https://student.tista.org',
-      'https://teacher.tista.org',
-      'https://admin.tista.org'
-    ]
-  : [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:3002',
-      'http://localhost:3003',
-      'http://localhost:3004'
-    ];
+const customOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : [];
+
+const defaultProdOrigins = [
+  'https://tista.org',
+  'https://educationalpark.tista.org',
+  'https://student.tista.org',
+  'https://teacher.tista.org',
+  'https://admin.tista.org'
+];
+
+const defaultDevOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003',
+  'http://localhost:3004'
+];
+
+const allowedOrigins = [
+  ...(process.env.NODE_ENV === 'production' ? defaultProdOrigins : defaultDevOrigins),
+  ...customOrigins
+];
 
 app.use(
   helmet({

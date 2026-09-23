@@ -33,9 +33,9 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     const fullPath = (req.originalUrl || req.baseUrl || req.url || '').toLowerCase();
     const origin = ((req.headers.origin as string) || (req.headers.referer as string) || '').toLowerCase();
 
-    const isAdminPortal = origin.includes(':3004') || origin.includes('admin.tista.org');
-    const isTeacherPortal = origin.includes(':3003') || origin.includes('teacher.tista.org');
-    const isStudentPortal = origin.includes(':3002') || origin.includes('student.tista.org');
+    const isAdminPortal = origin.includes(':3004') || origin.includes('admin');
+    const isTeacherPortal = origin.includes(':3003') || origin.includes('teacher');
+    const isStudentPortal = origin.includes(':3002') || origin.includes('student');
 
     const isAdminRoute = fullPath.startsWith('/api/v1/admin') || fullPath.includes('/admin');
     const isTeacherRoute = !isAdminRoute && (fullPath.startsWith('/api/v1/teacher') || fullPath.includes('/teacher/') || fullPath === '/api/v1/teacher');
