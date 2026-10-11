@@ -1117,12 +1117,29 @@ model AdmissionApplication {
   status                 AdmissionStatus         @default(PENDING)
 
   studentName            String
+  studentNameBn          String?
+  nationality            String?                 @default("বাংলাদেশী")
   dateOfBirth            DateTime
   gender                 String
   birthCertificateNumber String
   previousSchool         String?
+  previousSchoolGrade    String?
+  hasTransferCertificate Boolean?                @default(false)
   classAppliedForId      String
   classAppliedFor        ClassLevel              @relation(fields: [classAppliedForId], references: [id])
+  sessionName            String?
+
+  fatherNameBn           String?
+  fatherNameEn           String?
+  fatherNid              String?
+  fatherOccupation       String?
+  fatherPhone            String?
+
+  motherNameBn           String?
+  motherNameEn           String?
+  motherNid              String?
+  motherOccupation       String?
+  motherPhone            String?
 
   guardianName           String
   guardianRelation       String
@@ -1130,6 +1147,14 @@ model AdmissionApplication {
   guardianEmail          String?
   guardianNidNumber      String
   address                String                  @db.Text
+  presentVillage         String?
+  presentPost            String?
+  presentUpazila         String?
+  presentDistrict        String?
+  permanentVillage       String?
+  permanentPost          String?
+  permanentUpazila       String?
+  permanentDistrict      String?
   emergencyContact       String
 
   studentPhotoUrl        String?

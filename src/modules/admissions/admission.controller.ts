@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdmissionService } from './admission.service';
+import { AdmissionPdfService } from './admission-pdf.service';
 import { StorageService } from '../uploads/storage.service';
 import {
   publicAdmissionSchema,
@@ -58,17 +59,43 @@ export const submitPublicAdmission = async (
       {
         source: AdmissionSource.ONLINE,
         studentName: validatedData.studentName,
+        studentNameBn: validatedData.studentNameBn || undefined,
+        nationality: validatedData.nationality || undefined,
         dateOfBirth: validatedData.dateOfBirth,
         gender: validatedData.gender,
         birthCertificateNumber: validatedData.birthCertificateNumber,
         previousSchool: validatedData.previousSchool || undefined,
+        previousSchoolGrade: validatedData.previousSchoolGrade || undefined,
+        hasTransferCertificate: validatedData.hasTransferCertificate ?? undefined,
         classAppliedForId: validatedData.classAppliedForId,
+        sessionName: validatedData.sessionName || undefined,
+
+        fatherNameBn: validatedData.fatherNameBn || undefined,
+        fatherNameEn: validatedData.fatherNameEn || undefined,
+        fatherNid: validatedData.fatherNid || undefined,
+        fatherOccupation: validatedData.fatherOccupation || undefined,
+        fatherPhone: validatedData.fatherPhone || undefined,
+
+        motherNameBn: validatedData.motherNameBn || undefined,
+        motherNameEn: validatedData.motherNameEn || undefined,
+        motherNid: validatedData.motherNid || undefined,
+        motherOccupation: validatedData.motherOccupation || undefined,
+        motherPhone: validatedData.motherPhone || undefined,
+
         guardianName: validatedData.guardianName,
         guardianRelation: validatedData.guardianRelation,
         guardianPhone: validatedData.guardianPhone,
         guardianEmail: validatedData.guardianEmail || undefined,
         guardianNidNumber: validatedData.guardianNidNumber,
         address: validatedData.address,
+        presentVillage: validatedData.presentVillage || undefined,
+        presentPost: validatedData.presentPost || undefined,
+        presentUpazila: validatedData.presentUpazila || undefined,
+        presentDistrict: validatedData.presentDistrict || undefined,
+        permanentVillage: validatedData.permanentVillage || undefined,
+        permanentPost: validatedData.permanentPost || undefined,
+        permanentUpazila: validatedData.permanentUpazila || undefined,
+        permanentDistrict: validatedData.permanentDistrict || undefined,
         emergencyContact: validatedData.emergencyContact,
       }
     );
@@ -134,17 +161,43 @@ export const createOfficeAdmission = async (
       {
         source: AdmissionSource.OFFICE,
         studentName: validatedData.studentName,
+        studentNameBn: validatedData.studentNameBn || undefined,
+        nationality: validatedData.nationality || undefined,
         dateOfBirth: validatedData.dateOfBirth,
         gender: validatedData.gender,
         birthCertificateNumber: validatedData.birthCertificateNumber,
         previousSchool: validatedData.previousSchool || undefined,
+        previousSchoolGrade: validatedData.previousSchoolGrade || undefined,
+        hasTransferCertificate: validatedData.hasTransferCertificate ?? undefined,
         classAppliedForId: validatedData.classAppliedForId,
+        sessionName: validatedData.sessionName || undefined,
+
+        fatherNameBn: validatedData.fatherNameBn || undefined,
+        fatherNameEn: validatedData.fatherNameEn || undefined,
+        fatherNid: validatedData.fatherNid || undefined,
+        fatherOccupation: validatedData.fatherOccupation || undefined,
+        fatherPhone: validatedData.fatherPhone || undefined,
+
+        motherNameBn: validatedData.motherNameBn || undefined,
+        motherNameEn: validatedData.motherNameEn || undefined,
+        motherNid: validatedData.motherNid || undefined,
+        motherOccupation: validatedData.motherOccupation || undefined,
+        motherPhone: validatedData.motherPhone || undefined,
+
         guardianName: validatedData.guardianName,
         guardianRelation: validatedData.guardianRelation,
         guardianPhone: validatedData.guardianPhone,
         guardianEmail: validatedData.guardianEmail || undefined,
         guardianNidNumber: validatedData.guardianNidNumber,
         address: validatedData.address,
+        presentVillage: validatedData.presentVillage || undefined,
+        presentPost: validatedData.presentPost || undefined,
+        presentUpazila: validatedData.presentUpazila || undefined,
+        presentDistrict: validatedData.presentDistrict || undefined,
+        permanentVillage: validatedData.permanentVillage || undefined,
+        permanentPost: validatedData.permanentPost || undefined,
+        permanentUpazila: validatedData.permanentUpazila || undefined,
+        permanentDistrict: validatedData.permanentDistrict || undefined,
         emergencyContact: validatedData.emergencyContact,
         adminNote: validatedData.saveAsDraft
           ? `[DRAFT] ${validatedData.adminNote || ''}`
@@ -540,3 +593,89 @@ export const approveAdmission = async (
     next(error);
   }
 };
+
+export const downloadAdmissionPdf = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const idOrAppNo = req.params.id as string;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrAppNo);
+    const application = await prisma.admissionApplication.findFirst({
+      where: isUuid ? { id: idOrAppNo } : { applicationNumber: idOrAppNo },
+      select: { id: true, applicationNumber: true },
+    });
+
+    if (!application) {
+      return res.status(404).json(new ApiResponse(false, 'Admission application not found'));
+    }
+
+    const pdfBuffer = await AdmissionPdfService.generateAdmissionPdfBuffer(application.id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="Admission_Form_${application.applicationNumber}.pdf"`
+    );
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAdmissionHtmlPreview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const id = req.params.id as string;
+    const application = await AdmissionService.getApplicationById(id);
+    if (!application) {
+      return res.status(404).json(new ApiResponse(false, 'Admission application not found'));
+    }
+
+    const html = await AdmissionPdfService.generateAdmissionHtml(application);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const downloadBlankAdmissionPdf = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const pdfBuffer = await AdmissionPdfService.generateBlankAdmissionPdfBuffer();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'inline; filename="Educational_Park_Blank_Admission_Form_A4.pdf"'
+    );
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getBlankAdmissionHtmlPreview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const html = await AdmissionPdfService.generateBlankAdmissionHtml();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (error) {
+    next(error);
+  }
+};
+

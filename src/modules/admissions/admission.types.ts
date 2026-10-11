@@ -8,11 +8,28 @@ import {
 export interface CreateAdmissionDto {
   source: AdmissionSource;
   studentName: string;
+  studentNameBn?: string;
+  nationality?: string;
   dateOfBirth: string; // ISO date
   gender: string;
   birthCertificateNumber: string;
   previousSchool?: string;
+  previousSchoolGrade?: string;
+  hasTransferCertificate?: boolean;
   classAppliedForId: string;
+  sessionName?: string;
+
+  fatherNameBn?: string;
+  fatherNameEn?: string;
+  fatherNid?: string;
+  fatherOccupation?: string;
+  fatherPhone?: string;
+
+  motherNameBn?: string;
+  motherNameEn?: string;
+  motherNid?: string;
+  motherOccupation?: string;
+  motherPhone?: string;
 
   guardianName: string;
   guardianRelation: string;
@@ -20,6 +37,14 @@ export interface CreateAdmissionDto {
   guardianEmail?: string;
   guardianNidNumber: string;
   address: string;
+  presentVillage?: string;
+  presentPost?: string;
+  presentUpazila?: string;
+  presentDistrict?: string;
+  permanentVillage?: string;
+  permanentPost?: string;
+  permanentUpazila?: string;
+  permanentDistrict?: string;
   emergencyContact: string;
 
   studentPhotoUrl?: string;

@@ -18,6 +18,10 @@ import {
   downloadAdmissionDocument,
   reviewAdmissionDocument,
   approveAdmission,
+  downloadAdmissionPdf,
+  getAdmissionHtmlPreview,
+  downloadBlankAdmissionPdf,
+  getBlankAdmissionHtmlPreview,
 } from './admission.controller';
 
 const upload = multer({
@@ -80,6 +84,8 @@ adminAdmissionRouter.get('/:id/documents/:documentId/download', verifyAdminOrSig
 // Protect all other admin admission routes
 adminAdmissionRouter.use(requireAuth, requireRole('ADMIN'));
 
+adminAdmissionRouter.get('/blank-pdf', downloadBlankAdmissionPdf);
+adminAdmissionRouter.get('/blank-preview-html', getBlankAdmissionHtmlPreview);
 adminAdmissionRouter.get('/', getAdminAdmissions);
 adminAdmissionRouter.post(
   '/',
@@ -94,6 +100,8 @@ adminAdmissionRouter.post(
 );
 
 adminAdmissionRouter.get('/:id', getAdminAdmissionById);
+adminAdmissionRouter.get('/:id/pdf', downloadAdmissionPdf);
+adminAdmissionRouter.get('/:id/preview-html', getAdmissionHtmlPreview);
 adminAdmissionRouter.patch('/:id', updateAdminAdmission);
 
 adminAdmissionRouter.get('/:id/documents', getAdmissionDocuments);
@@ -111,3 +119,7 @@ adminAdmissionRouter.post('/:id/under-review', markAdmissionUnderReview);
 adminAdmissionRouter.post('/:id/approve', approveAdmission);
 adminAdmissionRouter.post('/:id/reject', rejectAdminAdmission);
 adminAdmissionRouter.post('/:id/cancel', cancelAdminAdmission);
+
+publicAdmissionRouter.get('/blank-pdf', downloadBlankAdmissionPdf);
+publicAdmissionRouter.get('/:id/pdf', downloadAdmissionPdf);
+
