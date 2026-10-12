@@ -5,29 +5,14 @@ import path from 'path';
 import prisma from '../../config/prisma';
 import { AdmissionDocumentType, AdmissionDocumentStatus } from '@prisma/client';
 import { getPuppeteerLaunchOptions } from '../../utils/puppeteer.util';
+import { SCHOOL_LOGO_BASE64 } from '../../assets/logo-base64';
 
 export class AdmissionPdfService {
   /**
    * Helper to load logo as base64 data URL
    */
   private static getLogoBase64(): string {
-    const candidates = [
-      path.join(process.cwd(), '..', 'admin', 'public', 'logo.jpg'),
-      path.join(process.cwd(), '..', 'educational-park', 'public', 'logo.jpg'),
-      path.join(process.cwd(), 'public', 'logo.jpg'),
-    ];
-
-    for (const p of candidates) {
-      if (fs.existsSync(p)) {
-        try {
-          const buf = fs.readFileSync(p);
-          return `data:image/jpeg;base64,${buf.toString('base64')}`;
-        } catch {
-          // ignore fallback
-        }
-      }
-    }
-    return '';
+    return SCHOOL_LOGO_BASE64;
   }
 
   /**
@@ -821,15 +806,7 @@ export class AdmissionPdfService {
     <div class="header-section">
       <!-- Logo -->
       <div class="logo-container">
-        ${logoDataUrl ? `<img src="${logoDataUrl}" class="logo-img" alt="Educational Park" />` : `
-          <svg viewBox="0 0 100 100" class="logo-img">
-            <circle cx="50" cy="50" r="48" fill="#ffffff" stroke="#02457a" stroke-width="4"/>
-            <circle cx="50" cy="50" r="43" fill="#f8fafc" stroke="#facc15" stroke-width="2"/>
-            <path d="M50 20 L58 35 L50 48 L42 35 Z" fill="#e11d48"/>
-            <path d="M30 55 Q50 46 70 55 L70 75 Q50 66 30 75 Z" fill="#02457a"/>
-            <path d="M50 50 L50 72" stroke="#ffffff" stroke-width="2"/>
-          </svg>
-        `}
+        <img src="${logoDataUrl || SCHOOL_LOGO_BASE64}" class="logo-img" alt="Educational Park" />
       </div>
 
       <!-- Main Header Text -->
@@ -1858,13 +1835,7 @@ export class AdmissionPdfService {
     <!-- Header Section -->
     <div class="header-section">
       <div class="logo-container">
-        ${logoDataUrl ? `<img src="${logoDataUrl}" class="logo-img" alt="Educational Park" />` : `
-          <svg viewBox="0 0 100 100" class="logo-img">
-            <circle cx="50" cy="50" r="48" fill="#ffffff" stroke="#02457a" stroke-width="4"/>
-            <path d="M50 20 L58 35 L50 48 L42 35 Z" fill="#e11d48"/>
-            <path d="M30 55 Q50 46 70 55 L70 75 Q50 66 30 75 Z" fill="#02457a"/>
-          </svg>
-        `}
+        <img src="${logoDataUrl || SCHOOL_LOGO_BASE64}" class="logo-img" alt="Educational Park" />
       </div>
 
       <div class="header-text">
