@@ -833,11 +833,11 @@ export class AdmissionPdfService {
 
       <!-- Main Header Text -->
       <div class="header-text">
-        <div class="sub-org">ভীতাম সমাজ উন্নয়ন সংস্থা কর্তৃক পরিচালিত</div>
+        <div class="sub-org">তিতাস সমাজ সংস্থা কর্তৃক পরিচালিত</div>
         <h1 class="school-title">এডুকেশনাল পার্ক</h1>
         <div><span class="class-badge">প্লে থেকে ক্লাস পঞ্চম শ্রেণি</span></div>
         <div class="contact-line">
-          <span>📍 আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
+          <span>📍 গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
           <span class="sep">|</span>
           <span>📞 +8801711052072</span>
         </div>
@@ -1093,7 +1093,7 @@ export class AdmissionPdfService {
       <div class="section-pill-header">৬. অভিভাবকের ঘোষণা</div>
       <div class="declaration-wrap">
         <div class="declaration-text">
-          আমি ঘোষণা করছি যে, এই আবেদনপত্রে প্রদত্ত সকল তথ্য সঠিক। আমার সন্তান/অভিভাব শিক্ষার্থীর বিদ্যালয়ের সকল নিয়ম-কানুন ও শৃঙ্খলা মেনে চলার দায়িত্ব আমি গ্রহণ করছি।
+          আমি এই মর্মে অঙ্গীকার করছি যে, উপরে প্রদত্ত সকল তথ্য সত্য ও নির্ভুল। আমার অভিভাবকত্বাধীন শিক্ষার্থী বিদ্যালয়ের সকল নিয়ম-কানুন ও শৃঙ্খলা মেনে চলতে বাধ্য থাকবে। প্রদত্ত কোনো তথ্য মিথ্যা বা অসত্য প্রমাণিত হলে বিদ্যালয় কর্তৃপক্ষ শিক্ষার্থীর ভর্তি বাতিল করার অধিকার সংরক্ষণ করবে।
         </div>
         <div class="declaration-sigs">
           <div class="sig-field">
@@ -1397,7 +1397,7 @@ export class AdmissionPdfService {
     <!-- Sheet Footer -->
     <div class="sheet-footer">
       <div style="display: flex; align-items: center; gap: 4px; color: #00875a; font-weight: 700;">
-        📞 হেল্পলাইন: +8801711052072 | আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
+        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
       </div>
       <div class="footer-tagline">— শিক্ষা দিয়ে গড়ি আলোকিত ভবিষ্যৎ —</div>
     </div>
@@ -1870,11 +1870,11 @@ export class AdmissionPdfService {
       </div>
 
       <div class="header-text">
-        <div class="sub-org">ভীতাম সমাজ উন্নয়ন সংস্থা কর্তৃক পরিচালিত</div>
+        <div class="sub-org">তিতাস সমাজ সংস্থা কর্তৃক পরিচালিত</div>
         <h1 class="school-title">এডুকেশনাল পার্ক</h1>
         <div><span class="class-badge">প্লে থেকে ক্লাস পঞ্চম শ্রেণি</span></div>
         <div class="contact-line">
-          <span>📍 আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
+          <span>📍 গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
           <span style="color:#94a3b8;">|</span>
           <span>📞 +8801711052072</span>
         </div>
@@ -2156,7 +2156,7 @@ export class AdmissionPdfService {
       <div class="section-pill-header">৩. অভিভাবকের অঙ্গীকারনামা</div>
       <div style="border:1px solid #cbd5e1; border-radius:6px; padding:6px 10px; font-size:11.5px; line-height:1.45; background:#ffffff;">
         <p style="margin:0 0 8px 0; text-align:justify;">
-          আমি এই মর্মে অঙ্গীকার করছি যে, উপরে প্রদত্ত সকল তথ্য সত্য ও নির্ভুল। আমার সন্তান/পোষ্য বিদ্যালয়ের সকল নিয়ম-কানুন ও শৃঙ্খলা মেনে চলবে। কোনো তথ্য অসত্য প্রমাণিত হলে তার ভর্তি সরাসরি বাতিল বলে গণ্য হবে।
+          আমি এই মর্মে অঙ্গীকার করছি যে, উপরে প্রদত্ত সকল তথ্য সত্য ও নির্ভুল। আমার অভিভাবকত্বাধীন শিক্ষার্থী বিদ্যালয়ের সকল নিয়ম-কানুন ও শৃঙ্খলা মেনে চলতে বাধ্য থাকবে। প্রদত্ত কোনো তথ্য মিথ্যা বা অসত্য প্রমাণিত হলে বিদ্যালয় কর্তৃপক্ষ শিক্ষার্থীর ভর্তি বাতিল করার অধিকার সংরক্ষণ করবে।
         </p>
         <div style="display:flex; justify-content:space-between; align-items:flex-end; padding-top:14px;">
           <div>তারিখ : <strong style="border-bottom:1px dotted #94a3b8; display:inline-block; width:120px;">&nbsp;</strong></div>
@@ -2243,7 +2243,7 @@ export class AdmissionPdfService {
     <!-- Sheet Footer -->
     <div class="sheet-footer">
       <div style="display:flex; align-items:center; gap:4px; color:#00875a; font-weight:700;">
-        📞 হেল্পলাইন: +8801711052072 | আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
+        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
       </div>
       <div style="font-weight:700; color:#02457a;">— শিক্ষা দিয়ে গড়ি আলোকিত ভবিষ্যৎ —</div>
     </div>

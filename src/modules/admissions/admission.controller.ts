@@ -616,7 +616,7 @@ export const downloadAdmissionPdf = async (
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="Admission_Form_${application.applicationNumber}.pdf"`
+      `attachment; filename="Admission_Form_${application.applicationNumber}.pdf"`
     );
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.end(pdfBuffer);
@@ -656,7 +656,7 @@ export const downloadBlankAdmissionPdf = async (
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      'inline; filename="Educational_Park_Blank_Admission_Form_A4.pdf"'
+      'attachment; filename="Educational_Park_Blank_Admission_Form_A4.pdf"'
     );
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.end(pdfBuffer);
