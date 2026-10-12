@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import puppeteer from 'puppeteer';
+import { getPuppeteerLaunchOptions } from '../../utils/puppeteer.util';
 
 export interface GenerateDigitalIdPdfOptions {
   studentName: string;
@@ -682,10 +683,7 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
 </body>
 </html>`;
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  const browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
   try {
     const page = await browser.newPage();

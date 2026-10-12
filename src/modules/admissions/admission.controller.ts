@@ -621,6 +621,7 @@ export const downloadAdmissionPdf = async (
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.end(pdfBuffer);
   } catch (error) {
+    console.error('Admission PDF download error:', error);
     next(error);
   }
 };
@@ -661,6 +662,7 @@ export const downloadBlankAdmissionPdf = async (
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.end(pdfBuffer);
   } catch (error) {
+    console.error('Blank Admission PDF download error:', error);
     next(error);
   }
 };

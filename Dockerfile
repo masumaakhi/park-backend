@@ -6,6 +6,9 @@ WORKDIR /app
 # Install openssl for Prisma
 RUN apk add --no-cache openssl
 
+# Skip puppeteer chromium download during build stage
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -25,11 +28,21 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install openssl for Prisma
-RUN apk add --no-cache openssl
+# Install openssl, chromium, and fonts required by Puppeteer on Alpine
+RUN apk add --no-cache \
+    openssl \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto
 
-# Set Node to production
-ENV NODE_ENV=production
+# Set Node and Puppeteer environment variables for container runtime
+ENV NODE_ENV=production \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy package files
 COPY package*.json ./

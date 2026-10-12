@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../../config/prisma';
 import { AdmissionDocumentType, AdmissionDocumentStatus } from '@prisma/client';
+import { getPuppeteerLaunchOptions } from '../../utils/puppeteer.util';
 
 export class AdmissionPdfService {
   /**
@@ -1435,10 +1436,7 @@ export class AdmissionPdfService {
 
     const html = await this.generateAdmissionHtml(application);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    const browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
     try {
       const page = await browser.newPage();
@@ -2259,10 +2257,7 @@ export class AdmissionPdfService {
   public static async generateBlankAdmissionPdfBuffer(): Promise<Buffer> {
     const html = await this.generateBlankAdmissionHtml();
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    const browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
     try {
       const page = await browser.newPage();
