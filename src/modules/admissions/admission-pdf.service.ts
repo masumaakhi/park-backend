@@ -811,11 +811,11 @@ export class AdmissionPdfService {
 
       <!-- Main Header Text -->
       <div class="header-text">
-        <div class="sub-org">তিতাস সমাজ সংস্থা কর্তৃক পরিচালিত</div>
+        <div class="sub-org">তিতাস সমাজ উন্নয়ন সংস্থা কতৃক পরিচালিত</div>
         <h1 class="school-title">এডুকেশনাল পার্ক</h1>
         <div><span class="class-badge">প্লে থেকে ক্লাস পঞ্চম শ্রেণি</span></div>
         <div class="contact-line">
-          <span>📍 গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
+          <span>📍 গ্রাম: আলীয়াবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
           <span class="sep">|</span>
           <span>📞 +8801711052072</span>
         </div>
@@ -1375,7 +1375,7 @@ export class AdmissionPdfService {
     <!-- Sheet Footer -->
     <div class="sheet-footer">
       <div style="display: flex; align-items: center; gap: 4px; color: #00875a; font-weight: 700;">
-        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
+        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীয়াবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
       </div>
       <div class="footer-tagline">— শিক্ষা দিয়ে গড়ি আলোকিত ভবিষ্যৎ —</div>
     </div>
@@ -1839,11 +1839,11 @@ export class AdmissionPdfService {
       </div>
 
       <div class="header-text">
-        <div class="sub-org">তিতাস সমাজ সংস্থা কর্তৃক পরিচালিত</div>
+        <div class="sub-org">তিতাস সমাজ উন্নয়ন সংস্থা কতৃক পরিচালিত</div>
         <h1 class="school-title">এডুকেশনাল পার্ক</h1>
         <div><span class="class-badge">প্লে থেকে ক্লাস পঞ্চম শ্রেণি</span></div>
         <div class="contact-line">
-          <span>📍 গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
+          <span>📍 গ্রাম: আলীয়াবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া</span>
           <span style="color:#94a3b8;">|</span>
           <span>📞 +8801711052072</span>
         </div>
@@ -2212,7 +2212,7 @@ export class AdmissionPdfService {
     <!-- Sheet Footer -->
     <div class="sheet-footer">
       <div style="display:flex; align-items:center; gap:4px; color:#00875a; font-weight:700;">
-        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীমাবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
+        📞 হেল্পলাইন: +8801711052072 | গ্রাম: আলীয়াবাদ, নবীনগর, ব্রাহ্মণবাড়িয়া
       </div>
       <div style="font-weight:700; color:#02457a;">— শিক্ষা দিয়ে গড়ি আলোকিত ভবিষ্যৎ —</div>
     </div>
