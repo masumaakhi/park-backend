@@ -21,7 +21,7 @@ export interface GenerateDigitalIdPdfOptions {
   verificationBaseUrl?: string;
 }
 
-export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOptions): Promise<Buffer> {
+export async function generateDigitalIdHtml(options: GenerateDigitalIdPdfOptions): Promise<string> {
   const {
     studentName,
     studentId,
@@ -35,10 +35,13 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
     expiryDate,
     photoUrl,
     verificationToken,
-    verificationBaseUrl = 'http://localhost:3001',
+    verificationBaseUrl = process.env.PUBLIC_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_SCHOOL_URL ||
+      'https://educationalpark.tista.org',
   } = options;
 
-  const verifyUrl = `${verificationBaseUrl}/verify/student-id/${verificationToken}`;
+  const verifyUrl = `${verificationBaseUrl.replace(/\/$/, '')}/verify/student-id/${verificationToken}`;
   const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
     width: 250,
     margin: 1,
@@ -64,7 +67,7 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
     }
   }
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -700,7 +703,10 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
 
 </body>
 </html>`;
+}
 
+export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOptions): Promise<Buffer> {
+  const html = await generateDigitalIdHtml(options);
   const browser = await puppeteer.launch(getPuppeteerLaunchOptions());
 
   try {

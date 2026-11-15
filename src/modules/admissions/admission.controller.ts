@@ -246,6 +246,15 @@ export const createOfficeAdmission = async (
   }
 };
 
+const getPublicApiBase = (req: Request): string => {
+  if (process.env.BACKEND_PUBLIC_URL) {
+    return process.env.BACKEND_PUBLIC_URL.replace(/\/$/, '');
+  }
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost:5000';
+  return `${proto}://${host}`;
+};
+
 export const getAdminAdmissionById = async (
   req: Request,
   res: Response,
@@ -258,6 +267,7 @@ export const getAdminAdmissionById = async (
       return res.status(404).json(new ApiResponse(false, 'Admission application not found'));
     }
 
+    const apiBase = getPublicApiBase(req);
     const enrichedDocuments = (application.documents || []).map((doc: any) => {
       const isExternalUrl = doc.fileUrl.startsWith('http://') || doc.fileUrl.startsWith('https://');
       const signedToken = StorageService.generateSignedToken(doc.id, 86400); // 24-hour token
@@ -266,10 +276,10 @@ export const getAdminAdmissionById = async (
         signedToken,
         viewUrl: isExternalUrl
           ? doc.fileUrl
-          : `http://localhost:5000/api/v1/admin/admissions/${id}/documents/${doc.id}/view?token=${encodeURIComponent(signedToken)}`,
+          : `${apiBase}/api/v1/admin/admissions/${id}/documents/${doc.id}/view?token=${encodeURIComponent(signedToken)}`,
         downloadUrl: isExternalUrl
           ? doc.fileUrl
-          : `http://localhost:5000/api/v1/admin/admissions/${id}/documents/${doc.id}/download?token=${encodeURIComponent(signedToken)}`,
+          : `${apiBase}/api/v1/admin/admissions/${id}/documents/${doc.id}/download?token=${encodeURIComponent(signedToken)}`,
       };
     });
 
@@ -362,6 +372,7 @@ export const getAdmissionDocuments = async (
       orderBy: { createdAt: 'asc' },
     });
 
+    const apiBase = getPublicApiBase(req);
     const enriched = documents.map((doc) => {
       const isExternalUrl = doc.fileUrl.startsWith('http://') || doc.fileUrl.startsWith('https://');
       const signedToken = StorageService.generateSignedToken(doc.id, 86400); // 24-hour token
@@ -370,10 +381,10 @@ export const getAdmissionDocuments = async (
         signedToken,
         viewUrl: isExternalUrl
           ? doc.fileUrl
-          : `http://localhost:5000/api/v1/admin/admissions/${id}/documents/${doc.id}/view?token=${encodeURIComponent(signedToken)}`,
+          : `${apiBase}/api/v1/admin/admissions/${id}/documents/${doc.id}/view?token=${encodeURIComponent(signedToken)}`,
         downloadUrl: isExternalUrl
           ? doc.fileUrl
-          : `http://localhost:5000/api/v1/admin/admissions/${id}/documents/${doc.id}/download?token=${encodeURIComponent(signedToken)}`,
+          : `${apiBase}/api/v1/admin/admissions/${id}/documents/${doc.id}/download?token=${encodeURIComponent(signedToken)}`,
       };
     });
 
@@ -465,6 +476,12 @@ export const viewAdmissionDocument = async (
 
     const filePath = StorageService.getPrivateFilePath(doc.fileUrl);
     if (!filePath) {
+      if (doc.mimeType?.startsWith('image/')) {
+        const svgPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.send(svgPlaceholder);
+      }
       return res.status(404).json(new ApiResponse(false, 'Document file not found on disk'));
     }
 
@@ -516,6 +533,12 @@ export const downloadAdmissionDocument = async (
 
     const filePath = StorageService.getPrivateFilePath(doc.fileUrl);
     if (!filePath) {
+      if (doc.mimeType?.startsWith('image/')) {
+        const svgPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.send(svgPlaceholder);
+      }
       return res.status(404).json(new ApiResponse(false, 'Document file not found on disk'));
     }
 
@@ -613,15 +636,27 @@ export const downloadAdmissionPdf = async (
       return res.status(404).json(new ApiResponse(false, 'Admission application not found'));
     }
 
-    const pdfBuffer = await AdmissionPdfService.generateAdmissionPdfBuffer(application.id);
+    try {
+      const pdfBuffer = await AdmissionPdfService.generateAdmissionPdfBuffer(application.id);
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="Admission_Form_${application.applicationNumber}.pdf"`
-    );
-    res.setHeader('Content-Length', pdfBuffer.length);
-    return res.end(pdfBuffer);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="Admission_Form_${application.applicationNumber}.pdf"`
+      );
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer);
+    } catch (pdfErr: any) {
+      console.warn('Puppeteer PDF generation failed on server, falling back to printable HTML preview:', pdfErr?.message);
+      const fullApp = await AdmissionService.getApplicationById(application.id);
+      if (fullApp) {
+        const html = await AdmissionPdfService.generateAdmissionHtml(fullApp);
+        const printableHtml = html.replace('</body>', '<script>window.onload = function() { window.print(); };</script></body>');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(printableHtml);
+      }
+      throw pdfErr;
+    }
   } catch (error) {
     console.error('Admission PDF download error:', error);
     next(error);
@@ -654,15 +689,23 @@ export const downloadBlankAdmissionPdf = async (
   next: NextFunction
 ) => {
   try {
-    const pdfBuffer = await AdmissionPdfService.generateBlankAdmissionPdfBuffer();
+    try {
+      const pdfBuffer = await AdmissionPdfService.generateBlankAdmissionPdfBuffer();
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      'attachment; filename="Educational_Park_Blank_Admission_Form_A4.pdf"'
-    );
-    res.setHeader('Content-Length', pdfBuffer.length);
-    return res.end(pdfBuffer);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename="Educational_Park_Blank_Admission_Form_A4.pdf"'
+      );
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer);
+    } catch (pdfErr: any) {
+      console.warn('Puppeteer blank PDF generation failed on server, falling back to HTML preview:', pdfErr?.message);
+      const html = await AdmissionPdfService.generateBlankAdmissionHtml();
+      const printableHtml = html.replace('</body>', '<script>window.onload = function() { window.print(); };</script></body>');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(printableHtml);
+    }
   } catch (error) {
     console.error('Blank Admission PDF download error:', error);
     next(error);

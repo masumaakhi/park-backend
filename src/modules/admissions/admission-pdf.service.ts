@@ -67,7 +67,8 @@ export class AdmissionPdfService {
     const studentPhoto = this.getStudentPhotoBase64(application.studentPhotoUrl || photoDoc);
 
     // QR code for quick verification
-    const verificationUrl = `http://localhost:3004/dashboard/admissions/${application.id}`;
+    const adminBase = process.env.ADMIN_PORTAL_URL || 'https://edupark-admin-portal.vercel.app';
+    const verificationUrl = `${adminBase.replace(/\/$/, '')}/dashboard/admissions/${application.id}`;
     let qrDataUrl = '';
     try {
       qrDataUrl = await QRCode.toDataURL(verificationUrl, {

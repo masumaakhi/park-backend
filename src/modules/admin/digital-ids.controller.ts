@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import QRCode from 'qrcode';
 import { recordAuditLog } from '../audit-logs/audit-log.service';
 import puppeteer from 'puppeteer';
-import { generateDigitalIdPdfBuffer } from '../digital-ids/pdf-template';
+import { generateDigitalIdPdfBuffer, generateDigitalIdHtml } from '../digital-ids/pdf-template';
 import fs from 'fs';
 import path from 'path';
 import { StorageService } from '../uploads/storage.service';
@@ -453,14 +453,17 @@ export const downloadDigitalIdPdf = async (req: Request, res: Response, next: Ne
 
     const enrollment = digitalId.student.academicEnrollments[0];
     const verificationBaseUrl =
-      process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
+      process.env.PUBLIC_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_SCHOOL_URL ||
+      'https://educationalpark.tista.org';
 
     const photoBase64 = await resolveStudentPhotoBase64(
       digitalId.student.id,
       digitalId.student.profileImage
     );
 
-    const pdfBuffer = await generateDigitalIdPdfBuffer({
+    const options = {
       studentName: digitalId.student.user.name,
       studentId: digitalId.student.studentId,
       className: enrollment?.classLevel?.name || 'Class 5',
@@ -474,15 +477,24 @@ export const downloadDigitalIdPdf = async (req: Request, res: Response, next: Ne
       photoUrl: photoBase64 || digitalId.student.profileImage || undefined,
       verificationToken: digitalId.verificationToken,
       verificationBaseUrl,
-    });
+    };
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="student-id-${encodeURIComponent(digitalId.student.studentId)}.pdf"`
-    );
-    res.setHeader('Cache-Control', 'private, no-cache, no-store');
-    res.send(pdfBuffer);
+    try {
+      const pdfBuffer = await generateDigitalIdPdfBuffer(options);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="student-id-${encodeURIComponent(digitalId.student.studentId)}.pdf"`
+      );
+      res.setHeader('Cache-Control', 'private, no-cache, no-store');
+      return res.send(pdfBuffer);
+    } catch (pdfErr: any) {
+      console.warn('Puppeteer digital ID generation failed, falling back to HTML printable card:', pdfErr?.message);
+      const html = await generateDigitalIdHtml(options);
+      const printableHtml = html.replace('</body>', '<script>window.onload = function() { window.print(); };</script></body>');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(printableHtml);
+    }
   } catch (error) {
     next(error);
   }

@@ -12,7 +12,8 @@ build/
 
 # Uploaded private files
 /uploads/
-/storage/
+!/storage/
+!/storage/**
 !src/modules/uploads/
 
 # Logs
