@@ -12,7 +12,12 @@ export const getRoutines = async (req: Request, res: Response, next: NextFunctio
         teacherSubjectAssignment: {
           include: {
             teacher: { include: { user: { select: { name: true } } } },
-            subject: { select: { name: true, code: true } }
+            subject: { select: { name: true, code: true } },
+            classSection: {
+              include: {
+                classLevel: true
+              }
+            }
           }
         },
         classSection: {
@@ -39,13 +44,26 @@ export const getRoutines = async (req: Request, res: Response, next: NextFunctio
 export const createRoutine = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { 
-      teacherSubjectAssignmentId, roomId, dayOfWeek, startTime, endTime 
+      teacherSubjectAssignmentId, roomId, dayOfWeek, startTime, endTime, academicSessionId, classSectionId 
     } = req.body;
     
+    // Check teacher assignment
+    const assignment = await prisma.teacherSubjectAssignment.findUnique({
+      where: { id: teacherSubjectAssignmentId }
+    });
+    
+    if (!assignment) {
+      throw new AppError('Teacher Assignment not found', 404);
+    }
+
+    const sessionToUse = academicSessionId || assignment.academicSessionId;
+    const sectionToUse = classSectionId || assignment.classSectionId;
+
     // Check room conflict
     const roomConflict = await prisma.routine.findFirst({
       where: {
         roomId,
+        academicSessionId: sessionToUse,
         dayOfWeek,
         isActive: true,
         OR: [
@@ -61,34 +79,29 @@ export const createRoutine = async (req: Request, res: Response, next: NextFunct
     }
 
     // Check teacher conflict
-    const assignment = await prisma.teacherSubjectAssignment.findUnique({
-      where: { id: teacherSubjectAssignmentId }
-    });
-    
-    if (!assignment) {
-      throw new AppError('Teacher Assignment not found', 404);
-    }
-      const teacherConflict = await prisma.routine.findFirst({
-        where: {
-          teacherSubjectAssignment: { teacherId: assignment.teacherId },
-          dayOfWeek,
-          isActive: true,
-          OR: [
-            { startTime: { lte: startTime }, endTime: { gt: startTime } },
-            { startTime: { lt: endTime }, endTime: { gte: endTime } },
-            { startTime: { gte: startTime }, endTime: { lte: endTime } }
-          ]
-        }
-      });
-
-      if (teacherConflict) {
-        throw new AppError('Teacher conflict detected during this time slot', 400);
+    const teacherConflict = await prisma.routine.findFirst({
+      where: {
+        teacherSubjectAssignment: { teacherId: assignment.teacherId },
+        academicSessionId: sessionToUse,
+        dayOfWeek,
+        isActive: true,
+        OR: [
+          { startTime: { lte: startTime }, endTime: { gt: startTime } },
+          { startTime: { lt: endTime }, endTime: { gte: endTime } },
+          { startTime: { gte: startTime }, endTime: { lte: endTime } }
+        ]
       }
+    });
 
+    if (teacherConflict) {
+      throw new AppError('Teacher conflict detected during this time slot', 400);
+    }
 
     // Check class section conflict
     const sectionConflict = await prisma.routine.findFirst({
       where: {
+        classSectionId: sectionToUse,
+        academicSessionId: sessionToUse,
         dayOfWeek,
         isActive: true,
         OR: [
@@ -110,8 +123,8 @@ export const createRoutine = async (req: Request, res: Response, next: NextFunct
         dayOfWeek, 
         startTime, 
         endTime,
-        academicSessionId: assignment.academicSessionId,
-        classSectionId: assignment.classSectionId
+        academicSessionId: sessionToUse,
+        classSectionId: sectionToUse
       }
     });
 

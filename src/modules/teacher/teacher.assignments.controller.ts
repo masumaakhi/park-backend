@@ -53,6 +53,69 @@ export const getAssignments = async (req: Request, res: Response, next: NextFunc
       whereClause.teacherSubjectAssignmentId = teacherSubjectAssignmentId as string;
     }
 
+    // Passive auto-sync for any attendance sessions with homework matching this teacher's assignments
+    const teacherAssignments = await prisma.teacherSubjectAssignment.findMany({
+      where: { teacherId: teacher.id },
+      select: { id: true }
+    });
+    const tsaIds = teacherAssignments.map(t => t.id);
+
+    if (tsaIds.length > 0) {
+      const activeAssignments = await prisma.classAssignment.findMany({
+        where: { teacherSubjectAssignmentId: { in: tsaIds } },
+        select: { id: true, teacherSubjectAssignmentId: true, dueDate: true }
+      });
+
+      for (const assign of activeAssignments) {
+        const assignDate = new Date(assign.dueDate);
+        const matchingSessions = await prisma.attendanceSession.findMany({
+          where: { teacherSubjectAssignmentId: assign.teacherSubjectAssignmentId },
+          include: { records: true }
+        });
+
+        for (const sess of matchingSessions) {
+          const sDate = new Date(sess.attendanceDate);
+          const diffHours = Math.abs(sDate.getTime() - assignDate.getTime()) / (1000 * 60 * 60);
+          const sameDay =
+            sDate.toISOString().slice(0, 10) === assignDate.toISOString().slice(0, 10) ||
+            sDate.toLocaleDateString('en-CA') === assignDate.toLocaleDateString('en-CA') ||
+            diffHours <= 26;
+          if (sameDay) {
+            for (const r of sess.records) {
+              let hasHw = true;
+              if (r.remarks) {
+                try {
+                  const p = JSON.parse(r.remarks);
+                  if (typeof p.hasHomework === 'boolean') hasHw = p.hasHomework;
+                } catch {}
+              }
+              if (hasHw) {
+                await prisma.assignmentSubmission.upsert({
+                  where: {
+                    assignmentId_studentId: {
+                      assignmentId: assign.id,
+                      studentId: r.studentId
+                    }
+                  },
+                  update: {
+                    status: SubmissionStatus.SUBMITTED,
+                    submittedAt: sess.attendanceDate
+                  },
+                  create: {
+                    assignmentId: assign.id,
+                    studentId: r.studentId,
+                    status: SubmissionStatus.SUBMITTED,
+                    submittedAt: sess.attendanceDate,
+                    content: 'Completed during class attendance check.'
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     const assignments = await prisma.classAssignment.findMany({
       where: whereClause,
       include: {
@@ -60,6 +123,20 @@ export const getAssignments = async (req: Request, res: Response, next: NextFunc
           include: {
             subject: true,
             classSection: { include: { classLevel: true } }
+          }
+        },
+        submissions: {
+          select: {
+            id: true,
+            status: true,
+            submittedAt: true,
+            student: {
+              select: {
+                id: true,
+                studentId: true,
+                user: { select: { name: true, email: true } }
+              }
+            }
           }
         },
         _count: {

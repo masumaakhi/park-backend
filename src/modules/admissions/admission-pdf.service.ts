@@ -6,6 +6,7 @@ import prisma from '../../config/prisma';
 import { AdmissionDocumentType, AdmissionDocumentStatus } from '@prisma/client';
 import { getPuppeteerLaunchOptions } from '../../utils/puppeteer.util';
 import { SCHOOL_LOGO_BASE64 } from '../../assets/logo-base64';
+import { parseBangladeshiAddress } from '../../utils/address-parser';
 
 export class AdmissionPdfService {
   /**
@@ -107,16 +108,20 @@ export class AdmissionPdfService {
     const rollNo = enrollment?.rollNumber || '';
     const studentId = application.student?.studentId || '';
 
-    // Address fallback
-    const presentVill = application.presentVillage || application.address || '';
-    const presentPost = application.presentPost || '';
-    const presentUpazila = application.presentUpazila || '';
-    const presentDist = application.presentDistrict || 'ব্রাহ্মণবাড়িয়া';
+    // Smart address breakdown
+    const parsedPresent = (!application.presentVillage || !application.presentDistrict) && application.address
+      ? parseBangladeshiAddress(application.address)
+      : null;
 
-    const permVill = application.permanentVillage || presentVill;
-    const permPost = application.permanentPost || presentPost;
-    const permUpazila = application.permanentUpazila || presentUpazila;
-    const permDist = application.permanentDistrict || presentDist;
+    const presentVill = application.presentVillage || parsedPresent?.village || application.address || '';
+    const presentPost = application.presentPost || parsedPresent?.post || '';
+    const presentUpazila = application.presentUpazila || parsedPresent?.upazila || '';
+    const presentDist = application.presentDistrict || parsedPresent?.district || '';
+
+    const permVill = application.permanentVillage || (application.permanentDistrict ? '' : presentVill);
+    const permPost = application.permanentPost || (application.permanentDistrict ? '' : presentPost);
+    const permUpazila = application.permanentUpazila || (application.permanentDistrict ? '' : presentUpazila);
+    const permDist = application.permanentDistrict || (application.permanentVillage ? '' : presentDist);
 
     return `<!DOCTYPE html>
 <html lang="bn">
@@ -124,7 +129,7 @@ export class AdmissionPdfService {
   <meta charset="utf-8" />
   <title>ভর্তি আবেদন ফরম - ${application.applicationNumber}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');
 
     @page {
       size: A4 portrait;
@@ -140,7 +145,7 @@ export class AdmissionPdfService {
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Hind Siliguri', 'SolaimanLipi', Arial, sans-serif;
+      font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Kalpurush', Arial, sans-serif;
       color: #0f172a;
       background: #f1f5f9;
       font-size: 13px;
@@ -644,6 +649,8 @@ export class AdmissionPdfService {
       border: 1px solid #cbd5e1;
       padding: 4px 6px;
       vertical-align: middle;
+      font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Kalpurush', Arial, sans-serif;
+      letter-spacing: 0.5px;
     }
 
     .doc-table tr:nth-child(even) {
@@ -1032,11 +1039,11 @@ export class AdmissionPdfService {
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">ডাকঘর :</span>
-            <span class="card-field-val">${presentPost || 'নবীনগর'}</span>
+            <span class="card-field-val">${presentPost}</span>
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">উপজেলা :</span>
-            <span class="card-field-val">${presentUpazila || 'নবীনগর'}</span>
+            <span class="card-field-val">${presentUpazila}</span>
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">জেলা :</span>
@@ -1052,11 +1059,11 @@ export class AdmissionPdfService {
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">ডাকঘর :</span>
-            <span class="card-field-val">${permPost || 'নবীনগর'}</span>
+            <span class="card-field-val">${permPost}</span>
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">উপজেলা :</span>
-            <span class="card-field-val">${permUpazila || 'নবীনগর'}</span>
+            <span class="card-field-val">${permUpazila}</span>
           </div>
           <div class="card-field-row">
             <span class="card-field-lbl">জেলা :</span>
@@ -1447,7 +1454,7 @@ export class AdmissionPdfService {
   <meta charset="utf-8" />
   <title>খালি ভর্তি আবেদন ফরম - এডুকেশনাল পার্ক</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');
 
     @page {
       size: A4 portrait;
@@ -1463,7 +1470,7 @@ export class AdmissionPdfService {
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Hind Siliguri', 'SolaimanLipi', Arial, sans-serif;
+      font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Kalpurush', Arial, sans-serif;
       color: #0f172a;
       background: #f1f5f9;
       font-size: 13px;

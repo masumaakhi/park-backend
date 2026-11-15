@@ -20,6 +20,7 @@ export const updateStudentSchema = z.object({
   body: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').optional(),
     phone: z.string().optional(),
+    password: z.string().min(6, 'Password must be at least 6 characters').optional(),
     departmentId: z.string().uuid('Invalid department ID').optional(),
     programId: z.string().uuid('Invalid program ID').optional(),
     batchId: z.string().uuid('Invalid batch ID').optional(),

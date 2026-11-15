@@ -14,6 +14,7 @@ import { AppError } from '../../utils/app-error';
 import bcrypt from 'bcrypt';
 import { generateComprehensiveMarksheet } from '../admin/marksheet-engine.service';
 import { generateDigitalIdPdfBuffer } from '../digital-ids/pdf-template';
+import { resolveStudentPhotoBase64 } from '../admin/digital-ids.controller';
 
 const prisma = new PrismaClient();
 
@@ -226,13 +227,15 @@ export const getStudentDashboard = async (req: Request, res: Response, next: Nex
       take: 4
     });
 
+    const resolvedPhoto = await resolveStudentPhotoBase64(student.id, student.profileImage);
+
     res.status(200).json(new ApiResponse(true, 'Student dashboard fetched', {
       student: {
         id: student.id,
         name: student.user.name,
         email: student.user.email,
         studentId: student.studentId,
-        profileImage: student.profileImage,
+        profileImage: resolvedPhoto,
         phone: student.phone,
         rollNumber: currentEnrollment?.rollNumber || null,
         classLevel: currentEnrollment?.classLevel?.name || 'Unassigned',
@@ -273,6 +276,8 @@ export const getStudentProfile = async (req: Request, res: Response, next: NextF
       },
     });
 
+    const resolvedPhoto = await resolveStudentPhotoBase64(student.id, student.profileImage);
+
     res.status(200).json(new ApiResponse(true, 'Student profile fetched', {
       profile: {
         id: student.id,
@@ -285,7 +290,7 @@ export const getStudentProfile = async (req: Request, res: Response, next: NextF
         guardianPhone: student.guardianPhone,
         guardianRelation: student.guardianRelation,
         emergencyContact: student.emergencyContact,
-        profileImage: student.profileImage,
+        profileImage: resolvedPhoto,
         rollNumber: currentEnrollment?.rollNumber || null,
         classLevel: currentEnrollment?.classLevel?.name || null,
         classSection: currentEnrollment?.classSection?.name || null,
@@ -1128,6 +1133,8 @@ export const getStudentDigitalId = async (req: Request, res: Response, next: Nex
       throw new AppError('Active digital ID not found for this student', 404);
     }
 
+    const resolvedPhoto = await resolveStudentPhotoBase64(student.id, student.profileImage);
+
     res.status(200).json(new ApiResponse(true, 'Digital ID fetched', {
       digitalId: {
         id: digitalId.id,
@@ -1141,7 +1148,7 @@ export const getStudentDigitalId = async (req: Request, res: Response, next: Nex
         classLevel: currentEnrollment?.classLevel?.name || null,
         classSection: currentEnrollment?.classSection?.name || null,
         academicSession: currentEnrollment?.academicSession?.name || null,
-        profileImage: student.profileImage,
+        profileImage: resolvedPhoto,
         guardianPhone: student.guardianPhone || student.phone || "+880 17 0000 0000",
         guardianName: student.guardianName || null,
       }
@@ -1169,6 +1176,8 @@ export const downloadMyDigitalIdPdf = async (req: Request, res: Response, next: 
     const verificationBaseUrl =
       process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
 
+    const resolvedPhoto = await resolveStudentPhotoBase64(student.id, student.profileImage);
+
     const pdfBuffer = await generateDigitalIdPdfBuffer({
       studentName: student.user.name,
       studentId: student.studentId,
@@ -1180,7 +1189,7 @@ export const downloadMyDigitalIdPdf = async (req: Request, res: Response, next: 
       cardNumber: digitalId.cardNumber,
       issueDate: new Date(digitalId.issueDate).toLocaleDateString('en-GB'),
       expiryDate: new Date(digitalId.expiryDate).toLocaleDateString('en-GB'),
-      photoUrl: student.profileImage || undefined,
+      photoUrl: resolvedPhoto || undefined,
       verificationToken: digitalId.verificationToken,
       verificationBaseUrl,
     });

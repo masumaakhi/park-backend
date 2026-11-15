@@ -10,9 +10,17 @@ export const getAssignments = async (req: Request, res: Response, next: NextFunc
     const assignments = await prisma.teacherSubjectAssignment.findMany({
       include: {
         teacher: { include: { user: { select: { name: true } } } },
-        academicSession: { select: { name: true } },
-        classSection: { select: { name: true } },
-        subject: { select: { name: true, code: true } }
+        academicSession: { select: { id: true, name: true, isActive: true } },
+        classSection: { 
+          include: { 
+            classLevel: { select: { id: true, name: true, code: true } } 
+          } 
+        },
+        subject: { 
+          include: { 
+            classLevel: { select: { id: true, name: true, code: true } } 
+          } 
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -90,15 +98,57 @@ export const deleteAssignment = async (req: Request, res: Response, next: NextFu
       throw new AppError('Assignment not found', 404);
     }
 
-    if (assignment._count.routines > 0 || assignment._count.attendanceSessions > 0 || assignment._count.classAssignments > 0) {
+    const hasLinkedRecords = 
+      assignment._count.routines > 0 || 
+      assignment._count.attendanceSessions > 0 || 
+      assignment._count.classAssignments > 0;
+
+    // If active and has linked records, require deactivating first
+    if (assignment.isActive && hasLinkedRecords) {
       throw new AppError(
-        'Cannot delete teacher assignment because it is linked to routines, attendance, or class assignments. Please deactivate it instead.',
+        'This assignment is currently Active and linked to routines or attendance. Please deactivate it first before deleting.',
         400
       );
     }
 
-    await prisma.teacherSubjectAssignment.delete({
-      where: { id }
+    // Cascade delete linked records safely in a transaction
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete attendance records & attendance sessions linked to this assignment
+      const sessions = await tx.attendanceSession.findMany({
+        where: { teacherSubjectAssignmentId: id },
+        select: { id: true }
+      });
+      const sessionIds = sessions.map(s => s.id);
+
+      if (sessionIds.length > 0) {
+        await tx.attendanceRecord.deleteMany({
+          where: { attendanceSessionId: { in: sessionIds } }
+        });
+        await tx.attendanceSession.deleteMany({
+          where: { id: { in: sessionIds } }
+        });
+      }
+
+      // 2. Unlink any routine references in other attendance sessions if any
+      await tx.attendanceSession.updateMany({
+        where: { routine: { teacherSubjectAssignmentId: id } },
+        data: { routineId: null }
+      });
+
+      // 3. Delete routines
+      await tx.routine.deleteMany({
+        where: { teacherSubjectAssignmentId: id }
+      });
+
+      // 4. Delete class assignments (submissions cascade via Prisma schema)
+      await tx.classAssignment.deleteMany({
+        where: { teacherSubjectAssignmentId: id }
+      });
+
+      // 5. Delete the teacher subject assignment
+      await tx.teacherSubjectAssignment.delete({
+        where: { id }
+      });
     });
 
     res.status(200).json(new ApiResponse(true, 'Assignment deleted successfully'));

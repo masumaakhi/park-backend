@@ -1,9 +1,107 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, AttendanceSessionStatus, AttendanceStatus } from '@prisma/client';
+import { PrismaClient, AttendanceSessionStatus, AttendanceStatus, SubmissionStatus } from '@prisma/client';
 import { ApiResponse } from '../../utils/api-response';
 import { AppError } from '../../utils/app-error';
 
 const prisma = new PrismaClient();
+
+// Sync attendance homework status with ClassAssignment submissions
+async function syncAttendanceHomeworkWithAssignments(
+  teacherSubjectAssignmentId: string,
+  attendanceDate: Date,
+  records: Array<{ id?: string; studentId?: string; hasHomework?: boolean; status?: string }>
+) {
+  try {
+    const sessionDate = new Date(attendanceDate);
+    const assignments = await prisma.classAssignment.findMany({
+      where: { teacherSubjectAssignmentId }
+    });
+
+    if (assignments.length === 0) return;
+
+    // Filter assignments whose dueDate falls on the same calendar day (UTC or local)
+    const matchingAssignments = assignments.filter((a) => {
+      const aDate = new Date(a.dueDate);
+      const diffMs = Math.abs(aDate.getTime() - sessionDate.getTime());
+      const diffHours = diffMs / (1000 * 60 * 60);
+      if (diffHours <= 26) return true;
+      const aIso = aDate.toISOString().slice(0, 10);
+      const sIso = sessionDate.toISOString().slice(0, 10);
+      if (aIso === sIso) return true;
+      const aLocal = aDate.toLocaleDateString('en-CA');
+      const sLocal = sessionDate.toLocaleDateString('en-CA');
+      return aLocal === sLocal;
+    });
+
+    if (matchingAssignments.length === 0) return;
+
+    // Resolve studentId for each record
+    const resolvedRecords: Array<{ studentId: string; hasHomework: boolean }> = [];
+    for (const r of records) {
+      let studentId = r.studentId;
+      if (!studentId && r.id) {
+        const dbRec = await prisma.attendanceRecord.findUnique({
+          where: { id: r.id },
+          select: { studentId: true }
+        });
+        if (dbRec) studentId = dbRec.studentId;
+      }
+      if (studentId) {
+        resolvedRecords.push({
+          studentId,
+          hasHomework: typeof r.hasHomework === 'boolean' ? r.hasHomework : true
+        });
+      }
+    }
+
+    for (const assignment of matchingAssignments) {
+      for (const item of resolvedRecords) {
+        if (item.hasHomework) {
+          await prisma.assignmentSubmission.upsert({
+            where: {
+              assignmentId_studentId: {
+                assignmentId: assignment.id,
+                studentId: item.studentId
+              }
+            },
+            update: {
+              status: SubmissionStatus.SUBMITTED,
+              submittedAt: sessionDate
+            },
+            create: {
+              assignmentId: assignment.id,
+              studentId: item.studentId,
+              status: SubmissionStatus.SUBMITTED,
+              submittedAt: sessionDate,
+              content: 'Completed during class attendance check.'
+            }
+          });
+        } else {
+          // If homework was unmarked as completed, remove attendance-generated submission if not graded
+          const existing = await prisma.assignmentSubmission.findUnique({
+            where: {
+              assignmentId_studentId: {
+                assignmentId: assignment.id,
+                studentId: item.studentId
+              }
+            }
+          });
+          if (
+            existing &&
+            existing.status !== SubmissionStatus.GRADED &&
+            existing.content?.includes('attendance check')
+          ) {
+            await prisma.assignmentSubmission.delete({
+              where: { id: existing.id }
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync attendance homework with assignments:', err);
+  }
+}
 
 const formatRecord = (r: any) => {
   let hasHomework = true;
@@ -119,6 +217,13 @@ export const createAttendanceSession = async (req: Request, res: Response, next:
       records: session.records.map(formatRecord)
     };
 
+    // Auto-sync attendance homework status with ClassAssignment submissions
+    await syncAttendanceHomeworkWithAssignments(
+      teacherSubjectAssignmentId,
+      date,
+      enrollments.map(e => ({ studentId: e.studentId, hasHomework: true }))
+    );
+
     res.status(201).json(new ApiResponse(true, 'Attendance session created', { session: sessionWithFormattedRecords }));
   } catch (error) {
     next(error);
@@ -218,9 +323,10 @@ export const updateAttendanceSession = async (req: Request, res: Response, next:
 
     if (!session) throw new AppError('Attendance session not found', 404);
 
-    if (session.status !== AttendanceSessionStatus.DRAFT && session.status !== AttendanceSessionStatus.REOPENED) {
-      throw new AppError('Cannot edit submitted or locked attendance session', 400);
-    }
+    // Teachers can edit attendance anytime (not locked)
+    // if (session.status === AttendanceSessionStatus.LOCKED) {
+    //   throw new AppError('This attendance session is locked and cannot be edited', 400);
+    // }
 
     if (Array.isArray(records)) {
       await prisma.$transaction(
@@ -237,6 +343,13 @@ export const updateAttendanceSession = async (req: Request, res: Response, next:
             }
           });
         })
+      );
+
+      // Auto-sync attendance homework status with ClassAssignment submissions
+      await syncAttendanceHomeworkWithAssignments(
+        session.teacherSubjectAssignmentId,
+        session.attendanceDate,
+        records
       );
     }
 
@@ -273,14 +386,25 @@ export const submitAttendanceSession = async (req: Request, res: Response, next:
 
     if (!session) throw new AppError('Attendance session not found', 404);
 
-    if (session.status === AttendanceSessionStatus.SUBMITTED || session.status === AttendanceSessionStatus.LOCKED) {
-      throw new AppError('Attendance session is already submitted or locked', 400);
-    }
+    // Allow re-submitting anytime
+    // if (session.status === AttendanceSessionStatus.LOCKED) {
+    //   throw new AppError('Attendance session is locked and cannot be modified', 400);
+    // }
 
     const updated = await prisma.attendanceSession.update({
       where: { id: sessionId },
       data: { status: AttendanceSessionStatus.SUBMITTED }
     });
+
+    // Auto-sync attendance homework status with ClassAssignment submissions upon final submission
+    const finalRecords = await prisma.attendanceRecord.findMany({
+      where: { attendanceSessionId: sessionId }
+    });
+    await syncAttendanceHomeworkWithAssignments(
+      session.teacherSubjectAssignmentId,
+      session.attendanceDate,
+      finalRecords.map(formatRecord)
+    );
 
     res.status(200).json(new ApiResponse(true, 'Attendance session submitted successfully', { session: updated }));
   } catch (error) {

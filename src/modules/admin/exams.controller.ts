@@ -106,10 +106,15 @@ export const getExams = async (req: Request, res: Response, next: NextFunction) 
   try {
     const exams = await prisma.exam.findMany({
       include: {
-        examType: { select: { name: true } },
-        academicSession: { select: { name: true } },
-        classLevel: { select: { name: true } },
-        classSection: { select: { name: true } },
+        examType: { select: { id: true, name: true, code: true } },
+        academicSession: { select: { id: true, name: true } },
+        classLevel: { select: { id: true, name: true } },
+        classSection: { select: { id: true, name: true } },
+        subjects: {
+          include: {
+            subject: { select: { id: true, name: true, code: true } }
+          }
+        },
         _count: { select: { subjects: true, marksheets: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -120,15 +125,193 @@ export const getExams = async (req: Request, res: Response, next: NextFunction) 
 
 export const createExam = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const exam = await prisma.exam.create({ data: req.body });
-    res.status(201).json(new ApiResponse(true, 'Exam created', { exam }));
+    const { subjectIds, ...rest } = req.body;
+    const exam = await prisma.exam.create({
+      data: {
+        ...rest,
+        status: rest.status || 'OPEN'
+      }
+    });
+
+    let finalSubjectIds: string[] = [];
+
+    if (Array.isArray(subjectIds) && subjectIds.length > 0) {
+      finalSubjectIds = subjectIds;
+    } else {
+      // Gather subjects assigned to this section + subjects belonging to this class level
+      const assignedSubjects = await prisma.teacherSubjectAssignment.findMany({
+        where: { classSectionId: exam.classSectionId, isActive: true },
+        select: { subjectId: true },
+        distinct: ['subjectId']
+      });
+
+      const classSubjects = exam.classLevelId
+        ? await prisma.subject.findMany({
+            where: { classLevelId: exam.classLevelId, isActive: true },
+            select: { id: true }
+          })
+        : [];
+
+      const subjectIdSet = new Set<string>([
+        ...assignedSubjects.map(a => a.subjectId),
+        ...classSubjects.map(s => s.id)
+      ]);
+      finalSubjectIds = Array.from(subjectIdSet);
+    }
+
+    if (finalSubjectIds.length > 0) {
+      await prisma.examSubject.createMany({
+        data: finalSubjectIds.map(subjectId => ({
+          examId: exam.id,
+          subjectId,
+          fullMarks: exam.totalMarks || 100,
+          passMarks: exam.passingMarks || 40
+        })),
+        skipDuplicates: true
+      });
+    }
+
+    const createdExam = await prisma.exam.findUnique({
+      where: { id: exam.id },
+      include: {
+        examType: true,
+        academicSession: true,
+        classLevel: true,
+        classSection: true,
+        subjects: { include: { subject: true } }
+      }
+    });
+
+    res.status(201).json(new ApiResponse(true, 'Exam created successfully', { exam: createdExam }));
   } catch (error) { next(error); }
 };
 
 export const updateExam = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    const exam = await prisma.exam.update({ where: { id }, data: req.body });
+    const data: any = { ...req.body };
+    if (data.status !== undefined) {
+      data.isPublished = data.status === 'PUBLISHED';
+    }
+    const exam = await prisma.exam.update({ where: { id }, data });
+
+    // Sync student marks lock state with exam status
+    if (data.status === 'OPEN') {
+      await prisma.studentMark.updateMany({
+        where: { examSubject: { examId: id } },
+        data: { status: 'DRAFT' }
+      });
+    } else if (data.status === 'PUBLISHED' || data.status === 'CLOSED') {
+      await prisma.studentMark.updateMany({
+        where: { examSubject: { examId: id } },
+        data: { status: 'SUBMITTED' }
+      });
+    }
+
     res.status(200).json(new ApiResponse(true, 'Exam updated', { exam }));
   } catch (error) { next(error); }
 };
+
+export const deleteExam = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    const exam = await prisma.exam.findUnique({ where: { id } });
+    if (!exam) {
+      throw new AppError('Exam not found', 404);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const examSubjects = await tx.examSubject.findMany({
+        where: { examId: id },
+        select: { id: true }
+      });
+      const examSubjectIds = examSubjects.map(es => es.id);
+
+      if (examSubjectIds.length > 0) {
+        await tx.studentMark.deleteMany({
+          where: { examSubjectId: { in: examSubjectIds } }
+        });
+      }
+
+      await tx.examSubject.deleteMany({ where: { examId: id } });
+      await tx.marksheet.deleteMany({ where: { examId: id } });
+      await tx.exam.delete({ where: { id } });
+    });
+
+    res.status(200).json(new ApiResponse(true, 'Exam deleted successfully'));
+  } catch (error) { next(error); }
+};
+
+export const syncExamSubjects = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    const exam = await prisma.exam.findUnique({
+      where: { id },
+      include: {
+        classLevel: true,
+        classSection: true,
+        subjects: true
+      }
+    });
+
+    if (!exam) {
+      throw new AppError('Exam not found', 404);
+    }
+
+    // Gather subjects assigned to this section + subjects belonging to this class level
+    const assignedSubjects = exam.classSectionId
+      ? await prisma.teacherSubjectAssignment.findMany({
+          where: { classSectionId: exam.classSectionId, isActive: true },
+          select: { subjectId: true },
+          distinct: ['subjectId']
+        })
+      : [];
+
+    const classSubjects = exam.classLevelId
+      ? await prisma.subject.findMany({
+          where: { classLevelId: exam.classLevelId, isActive: true },
+          select: { id: true }
+        })
+      : [];
+
+    const subjectIdSet = new Set<string>([
+      ...assignedSubjects.map(a => a.subjectId),
+      ...classSubjects.map(s => s.id)
+    ]);
+
+    if (subjectIdSet.size === 0) {
+      throw new AppError('No active subjects found for this class. Please add subjects first in Academic Setup > Subjects.', 400);
+    }
+
+    const created = await prisma.examSubject.createMany({
+      data: Array.from(subjectIdSet).map(subjectId => ({
+        examId: exam.id,
+        subjectId,
+        fullMarks: exam.totalMarks || 100,
+        passMarks: exam.passingMarks || 40
+      })),
+      skipDuplicates: true
+    });
+
+    const updatedExam = await prisma.exam.findUnique({
+      where: { id: exam.id },
+      include: {
+        examType: { select: { id: true, name: true, code: true } },
+        academicSession: { select: { id: true, name: true } },
+        classLevel: { select: { id: true, name: true } },
+        classSection: { select: { id: true, name: true } },
+        subjects: {
+          include: {
+            subject: {
+              select: { id: true, name: true, code: true }
+            }
+          }
+        },
+        _count: { select: { subjects: true, marksheets: true } }
+      }
+    });
+
+    res.status(200).json(new ApiResponse(true, `Successfully synced ${created.count} subjects to this exam`, { exam: updatedExam }));
+  } catch (error) { next(error); }
+};
+

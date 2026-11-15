@@ -7,12 +7,65 @@ import QRCode from 'qrcode';
 import { recordAuditLog } from '../audit-logs/audit-log.service';
 import puppeteer from 'puppeteer';
 import { generateDigitalIdPdfBuffer } from '../digital-ids/pdf-template';
+import fs from 'fs';
+import path from 'path';
+import { StorageService } from '../uploads/storage.service';
+
+export const resolveStudentPhotoBase64 = async (
+  studentId: string,
+  profileImage?: string | null
+): Promise<string | null> => {
+  if (profileImage) {
+    if (profileImage.startsWith('http') || profileImage.startsWith('data:')) {
+      return profileImage;
+    }
+    const filePath = StorageService.getPrivateFilePath(profileImage);
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+        const buffer = fs.readFileSync(filePath);
+        return `data:${mime};base64,${buffer.toString('base64')}`;
+      } catch {
+        // fallback
+      }
+    }
+  }
+
+  // Fallback to admission document STUDENT_PHOTO
+  const photoDoc = await prisma.admissionDocument.findFirst({
+    where: {
+      admissionApplication: { studentId },
+      documentType: 'STUDENT_PHOTO',
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (photoDoc?.fileUrl) {
+    if (photoDoc.fileUrl.startsWith('http') || photoDoc.fileUrl.startsWith('data:')) {
+      return photoDoc.fileUrl;
+    }
+    const filePath = StorageService.getPrivateFilePath(photoDoc.fileUrl);
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+        const buffer = fs.readFileSync(filePath);
+        return `data:${mime};base64,${buffer.toString('base64')}`;
+      } catch {
+        // fallback
+      }
+    }
+  }
+
+  return null;
+};
 
 export const getDigitalIds = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { search, status, page = 1, limit = 10 } = req.query;
+    const { search, status, classLevelId, classSectionId, page = 1, limit = 100 } = req.query;
     const pageNum = Math.max(1, Number(page));
-    const limitNum = Math.min(100, Math.max(1, Number(limit)));
+    const limitNum = Math.min(500, Math.max(1, Number(limit)));
     const skip = (pageNum - 1) * limitNum;
 
     const where: any = {};
@@ -25,6 +78,18 @@ export const getDigitalIds = async (req: Request, res: Response, next: NextFunct
       where.revokedAt = null;
     } else if (status === 'REVOKED') {
       where.revokedAt = { not: null };
+    }
+
+    if (classLevelId || classSectionId) {
+      where.student = {
+        academicEnrollments: {
+          some: {
+            isCurrent: true,
+            ...(classLevelId ? { classLevelId: String(classLevelId) } : {}),
+            ...(classSectionId ? { classSectionId: String(classSectionId) } : {}),
+          },
+        },
+      };
     }
 
     if (search) {
@@ -126,9 +191,18 @@ export const getDigitalIdById = async (req: Request, res: Response, next: NextFu
       },
     });
 
+    const photoBase64 = await resolveStudentPhotoBase64(
+      digitalId.student.id,
+      digitalId.student.profileImage
+    );
+
     res.status(200).json(
       new ApiResponse(true, 'Digital ID retrieved', {
         ...digitalId,
+        student: {
+          ...digitalId.student,
+          profileImage: photoBase64 || digitalId.student.profileImage,
+        },
         qrCodeDataUrl,
         verifyUrl,
       })
@@ -381,6 +455,11 @@ export const downloadDigitalIdPdf = async (req: Request, res: Response, next: Ne
     const verificationBaseUrl =
       process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
 
+    const photoBase64 = await resolveStudentPhotoBase64(
+      digitalId.student.id,
+      digitalId.student.profileImage
+    );
+
     const pdfBuffer = await generateDigitalIdPdfBuffer({
       studentName: digitalId.student.user.name,
       studentId: digitalId.student.studentId,
@@ -392,7 +471,7 @@ export const downloadDigitalIdPdf = async (req: Request, res: Response, next: Ne
       cardNumber: digitalId.cardNumber,
       issueDate: new Date(digitalId.issueDate).toLocaleDateString('en-GB'),
       expiryDate: new Date(digitalId.expiryDate).toLocaleDateString('en-GB'),
-      photoUrl: digitalId.student.profileImage || undefined,
+      photoUrl: photoBase64 || digitalId.student.profileImage || undefined,
       verificationToken: digitalId.verificationToken,
       verificationBaseUrl,
     });

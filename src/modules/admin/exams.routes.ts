@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { 
   getExamTypes, createExamType, updateExamType, deleteExamType,
   getGradeScales, createGradeScale, updateGradeScale, deleteGradeScale,
-  getExams, createExam, updateExam 
+  getExams, createExam, updateExam, deleteExam, syncExamSubjects 
 } from './exams.controller';
 import { validate } from '../../middleware/validate.middleware';
 import { examTypeSchema, gradeScaleSchema, examSchema, updateExamSchema } from './exams.schema';
@@ -25,6 +25,8 @@ router.delete('/grade-scales/:id', deleteGradeScale);
 // Exams
 router.get('/', getExams);
 router.post('/', validate(examSchema), createExam);
+router.post('/:id/sync-subjects', syncExamSubjects);
 router.patch('/:id', validate(updateExamSchema), updateExam);
+router.delete('/:id', deleteExam);
 
 export default router;

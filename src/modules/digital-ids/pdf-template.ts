@@ -1,6 +1,9 @@
 import QRCode from 'qrcode';
 import puppeteer from 'puppeteer';
 import { getPuppeteerLaunchOptions } from '../../utils/puppeteer.util';
+import fs from 'fs';
+import path from 'path';
+import { StorageService } from '../uploads/storage.service';
 
 export interface GenerateDigitalIdPdfOptions {
   studentName: string;
@@ -46,6 +49,20 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
   });
 
   const cardNoShort = cardNumber ? cardNumber.replace(/^[^\d]*/, '') : '000125';
+
+  let finalPhotoUrl = photoUrl;
+  if (photoUrl && !photoUrl.startsWith('data:') && !photoUrl.startsWith('http')) {
+    const filePath = StorageService.getPrivateFilePath(photoUrl);
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+        finalPhotoUrl = `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+      } catch {
+        // fallback
+      }
+    }
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -350,7 +367,7 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 20px;
+    gap: 36px;
     flex: 1;
     position: relative;
     z-index: 2;
@@ -392,6 +409,7 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
     flex-direction: column;
     justify-content: space-between;
     height: 100%;
+    padding-left: 18px;
   }
   .contact-list {
     display: flex;
@@ -522,7 +540,7 @@ export async function generateDigitalIdPdfBuffer(options: GenerateDigitalIdPdfOp
 
       <div class="front-body">
         <div class="photo-frame">
-          ${photoUrl ? `<img src="${photoUrl}" alt="Photo" />` : `<div class="photo-placeholder">${studentName ? studentName[0].toUpperCase() : 'S'}</div>`}
+          ${finalPhotoUrl ? `<img src="${finalPhotoUrl}" alt="Photo" />` : `<div class="photo-placeholder">${studentName ? studentName[0].toUpperCase() : 'S'}</div>`}
         </div>
 
         <div class="accent-line"></div>

@@ -171,7 +171,12 @@ export const getProfile = async (req: Request, res: Response, next: NextFunction
       throw new AppError('Teacher profile not found', 404);
     }
 
-    res.status(200).json(new ApiResponse(true, 'Profile fetched', { profile: user }));
+    const activeSession = await prisma.academicSession.findFirst({ where: { isActive: true } });
+
+    res.status(200).json(new ApiResponse(true, 'Profile fetched', { 
+      profile: user,
+      activeSession
+    }));
   } catch (error) {
     next(error);
   }

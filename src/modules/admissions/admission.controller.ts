@@ -468,6 +468,8 @@ export const viewAdmissionDocument = async (
       return res.status(404).json(new ApiResponse(false, 'Document file not found on disk'));
     }
 
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
     res.setHeader('Content-Type', doc.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.fileName)}"`);
     res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
@@ -680,4 +682,62 @@ export const getBlankAdmissionHtmlPreview = async (
     next(error);
   }
 };
+
+export const deleteAdminAdmission = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const id = req.params.id as string;
+    const adminUser = (req as any).user;
+
+    const application = await prisma.admissionApplication.findUnique({
+      where: { id },
+      include: { documents: true, student: true },
+    });
+
+    if (!application) {
+      return res.status(404).json(new ApiResponse(false, 'Admission application not found'));
+    }
+
+    // Optional: Delete physical files on disk for private documents
+    for (const doc of application.documents) {
+      if (doc.fileUrl && !doc.fileUrl.startsWith('http')) {
+        const filePath = StorageService.getPrivateFilePath(doc.fileUrl);
+        if (filePath && fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch {
+            // ignore deletion error
+          }
+        }
+      }
+    }
+
+    // Delete documents in DB
+    await prisma.admissionDocument.deleteMany({
+      where: { admissionApplicationId: id },
+    });
+
+    // Delete application
+    await prisma.admissionApplication.delete({
+      where: { id },
+    });
+
+    await recordAuditLog({
+      actorId: adminUser?.id,
+      actorRole: 'ADMIN',
+      action: 'ADMISSION_APPLICATION_DELETED',
+      module: 'ADMISSIONS',
+      affectedRecordId: id,
+      safeMetadata: { applicationNumber: application.applicationNumber, studentName: application.studentName },
+    });
+
+    return res.json(new ApiResponse(true, 'Admission application deleted successfully'));
+  } catch (error) {
+    next(error);
+  }
+};
+
 

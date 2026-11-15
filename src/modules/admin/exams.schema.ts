@@ -25,14 +25,16 @@ export const examSchema = z.object({
     title: z.string().min(1, 'Title is required'),
     examTypeId: z.string().uuid(),
     academicSessionId: z.string().uuid(),
-    programId: z.string().uuid(),
-    semesterId: z.string().uuid(),
-    batchId: z.string().uuid(),
+    classLevelId: z.string().uuid().optional(),
     classSectionId: z.string().uuid(),
-    startDate: z.string().datetime(),
-    endDate: z.string().datetime(),
+    startDate: z.string(),
+    endDate: z.string(),
     totalMarks: z.number().min(1),
     passingMarks: z.number().min(1),
+    subjectIds: z.array(z.string().uuid()).optional(),
+    programId: z.string().uuid().optional().nullable(),
+    semesterId: z.string().uuid().optional().nullable(),
+    batchId: z.string().uuid().optional().nullable(),
   })
 });
 

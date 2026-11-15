@@ -22,6 +22,7 @@ import {
   getAdmissionHtmlPreview,
   downloadBlankAdmissionPdf,
   getBlankAdmissionHtmlPreview,
+  deleteAdminAdmission,
 } from './admission.controller';
 
 const upload = multer({
@@ -119,6 +120,7 @@ adminAdmissionRouter.post('/:id/under-review', markAdmissionUnderReview);
 adminAdmissionRouter.post('/:id/approve', approveAdmission);
 adminAdmissionRouter.post('/:id/reject', rejectAdminAdmission);
 adminAdmissionRouter.post('/:id/cancel', cancelAdminAdmission);
+adminAdmissionRouter.delete('/:id', deleteAdminAdmission);
 
 publicAdmissionRouter.get('/blank-pdf', downloadBlankAdmissionPdf);
 publicAdmissionRouter.get('/:id/pdf', downloadAdmissionPdf);

@@ -57,6 +57,34 @@ export const getTeacherExams = async (req: Request, res: Response, next: NextFun
     const classSectionIds = assignments.map(a => a.classSectionId);
     const subjectIds = assignments.map(a => a.subjectId);
 
+    // Ensure examSubject records exist for any matching OPEN/CLOSED/PUBLISHED exams
+    if (classSectionIds.length > 0) {
+      const candidateExams = await prisma.exam.findMany({
+        where: {
+          status: { in: [ExamStatus.OPEN, ExamStatus.CLOSED, ExamStatus.PUBLISHED] },
+          classSectionId: { in: classSectionIds }
+        },
+        include: { subjects: true }
+      });
+
+      for (const ex of candidateExams) {
+        const secAssignments = assignments.filter(a => a.classSectionId === ex.classSectionId);
+        for (const sa of secAssignments) {
+          const exists = ex.subjects.some(es => es.subjectId === sa.subjectId);
+          if (!exists) {
+            await prisma.examSubject.create({
+              data: {
+                examId: ex.id,
+                subjectId: sa.subjectId,
+                fullMarks: ex.totalMarks || 100,
+                passMarks: ex.passingMarks || 40
+              }
+            });
+          }
+        }
+      }
+    }
+
     const exams = await prisma.exam.findMany({
       where: {
         status: { in: [ExamStatus.OPEN, ExamStatus.CLOSED, ExamStatus.PUBLISHED] },
@@ -196,6 +224,10 @@ export const saveExamSubjectMarks = async (req: Request, res: Response, next: Ne
 
     const { teacher, examSubject } = await verifyTeacherExamSubjectAccess(userId, examId as string, examSubjectId as string);
 
+    if (examSubject.exam.status !== ExamStatus.OPEN) {
+      throw new AppError('This exam is closed or published. Marks entry is locked.', 403);
+    }
+
     if (!Array.isArray(marks)) {
       throw new AppError('Marks must be an array of student records', 400);
     }
@@ -224,9 +256,15 @@ export const saveExamSubjectMarks = async (req: Request, res: Response, next: Ne
         if (m.isAbsent) {
           obtained = 0;
         } else if (mRaw !== null && tRaw !== null) {
-          const m25 = mRaw > 25 ? mRaw * 0.25 : mRaw;
-          const t75 = tRaw > 75 ? tRaw * 0.75 : tRaw;
+          const m25 = mRaw > 25 ? Math.round(mRaw * 0.25 * 10) / 10 : mRaw;
+          const t75 = Math.round(tRaw * 0.75 * 10) / 10;
           obtained = Math.round((m25 + t75) * 10) / 10;
+        } else if (mRaw !== null && tRaw === null) {
+          const m25 = mRaw > 25 ? Math.round(mRaw * 0.25 * 10) / 10 : mRaw;
+          obtained = Math.round(m25 * 10) / 10;
+        } else if (mRaw === null && tRaw !== null) {
+          const t75 = Math.round(tRaw * 0.75 * 10) / 10;
+          obtained = Math.round(t75 * 10) / 10;
         } else {
           obtained = Math.min(Math.max(0, Number(m.marksObtained || 0)), maxMarks);
         }
@@ -275,7 +313,11 @@ export const submitExamSubjectMarks = async (req: Request, res: Response, next: 
     const userId = req.user?.id!;
     const { examId, examSubjectId } = req.params;
 
-    const { teacher } = await verifyTeacherExamSubjectAccess(userId, examId as string, examSubjectId as string);
+    const { teacher, examSubject } = await verifyTeacherExamSubjectAccess(userId, examId as string, examSubjectId as string);
+
+    if (examSubject.exam.status !== ExamStatus.OPEN) {
+      throw new AppError('This exam is closed or published. Marks cannot be submitted.', 403);
+    }
 
     // Update all draft marks for this subject to SUBMITTED
     await prisma.studentMark.updateMany({

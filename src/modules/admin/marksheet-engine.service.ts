@@ -31,8 +31,12 @@ export interface MarksheetSubjectRow {
 }
 
 export interface TermSummary {
-  totalMarks: number;
-  percentage: number;
+  academicMarks: number | null;
+  continuousMarks: number | null;
+  continuousScore10: number | null;
+  continuousGrade: string | null;
+  totalMarks: number | null;
+  percentage: number | null;
   positionInClass: number | null;
   totalStudents: number;
   totalWorkingDays: number;
@@ -59,8 +63,15 @@ export interface ComprehensiveMarksheetData {
     term2: TermSummary;
     term3: TermSummary;
     finalResult: {
-      totalMarks: number;
-      percentage: number;
+      academicMarks: number | null;
+      continuousMarks: number | null;
+      continuousScore10: number | null;
+      term1ContinuousScore30: number | null;
+      term2ContinuousScore30: number | null;
+      term3ContinuousScore40: number | null;
+      continuousGrade: string | null;
+      totalMarks: number | null;
+      percentage: number | null;
       positionInClass: number | null;
       totalStudents: number;
       totalWorkingDays: number;
@@ -72,6 +83,8 @@ export interface ComprehensiveMarksheetData {
     sportsAndGames: string;
     cleanliness: string;
     handwriting: string;
+    continuousScore10: number;
+    continuousGrade: string;
     teacherRemarks: string;
     promotionStatus: string; // "PROMOTED" | "FAILED" | "PENDING"
   };
@@ -207,8 +220,8 @@ export async function generateComprehensiveMarksheet(
         }
 
         if (tRaw !== null) {
-          // If out of 100, scale to 75%; if entered <= 75, keep as is
-          t75 = tRaw > 75 ? Math.round((tRaw * 0.75) * 10) / 10 : Math.round(tRaw * 10) / 10;
+          // Term End exam is evaluated out of 100 and converted to 75 (x 0.75)
+          t75 = Math.round((tRaw * 0.75) * 10) / 10;
         }
 
         if (m25 !== null && t75 !== null) {
@@ -326,7 +339,114 @@ export async function generateComprehensiveMarksheet(
     });
   }
 
-  // 7. Calculate Class Position (Ranks) for Term 1, Term 2, Term 3, and Final
+  const getCoCurricularGrade = (percentage: number) => {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    return 'D';
+  };
+
+  // Helper to calculate 10% Continuous Assessment (Attendance 3.5%, Daily Homework 3.5%, Cleanliness 3.0%)
+  const maxContinuousMarks = Math.round((totalFullMarks * 0.1) * 10) / 10;
+  async function getStudentContinuousAssessment(stuId: string, maxContMarks: number, targetTerm?: number) {
+    const allAttRecords = await prisma.attendanceRecord.findMany({
+      where: { studentId: stuId },
+      include: { attendanceSession: true },
+    });
+
+    let attRecords = allAttRecords;
+    if (targetTerm) {
+      const termRecords = allAttRecords.filter((r) => {
+        const d = new Date(r.attendanceSession?.attendanceDate || r.createdAt);
+        const m = d.getMonth() + 1;
+        if (targetTerm === 1) return m <= 4;
+        if (targetTerm === 2) return m >= 5 && m <= 8;
+        if (targetTerm === 3) return m >= 9;
+        return true;
+      });
+      if (termRecords.length > 0) {
+        attRecords = termRecords;
+      }
+    }
+
+    const totWorking = attRecords.length || (targetTerm ? 60 : 180);
+    const presDays =
+      attRecords.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length ||
+      (attRecords.length === 0 ? Math.min(56, totWorking) : 0);
+
+    let hwCount = 0;
+    let dScore = 0;
+    for (const r of attRecords) {
+      let hasHw = true;
+      let dUp = 'PERFECT';
+      if (r.remarks) {
+        try {
+          const p = JSON.parse(r.remarks);
+          if (typeof p.hasHomework === 'boolean') hasHw = p.hasHomework;
+          if (p.dressup) dUp = p.dressup;
+        } catch {}
+      }
+      if (hasHw) hwCount++;
+      if (dUp === 'PERFECT') dScore += 1.0;
+      else if (dUp === 'MODERATE') dScore += 0.6;
+    }
+
+    const attPct = totWorking > 0 ? (presDays / totWorking) * 100 : 90;
+    const hwPct = attRecords.length > 0 ? (hwCount / attRecords.length) * 100 : 90;
+    const dPct = attRecords.length > 0 ? (dScore / attRecords.length) * 100 : 90;
+
+    // Weightage: Attendance 3.5, Homework 3.5, Cleanliness 3.0 (Total = 10% / 10.0 score)
+    const score10 = (attPct * 0.035) + (hwPct * 0.035) + (dPct * 0.030);
+    const normalizedScore10 = Math.min(10, Math.max(0, Math.round(score10 * 10) / 10));
+    const continuousPct = Math.round(normalizedScore10 * 10 * 10) / 10;
+    const continuousMarks = Math.round(((normalizedScore10 / 10) * maxContMarks) * 10) / 10;
+
+    // Specific co-curricular scores out of 10.0
+    const disciplineScore = Math.min(10, Math.max(0, Math.round(((hwPct + attPct) / 2 / 10) * 10) / 10));
+    const sportsScore = Math.min(10, Math.max(0, Math.round((attPct / 10) * 10) / 10));
+    const cleanlinessScore = Math.min(10, Math.max(0, Math.round((dPct / 10) * 10) / 10));
+    const handwritingScore = Math.min(10, Math.max(0, Math.round((hwPct / 10) * 10) / 10));
+
+    return {
+      totWorking,
+      presDays,
+      score10: normalizedScore10,
+      continuousMarks,
+      continuousGrade: getCoCurricularGrade(continuousPct),
+      disciplineScore: String(disciplineScore),
+      sportsScore: String(sportsScore),
+      cleanlinessScore: String(cleanlinessScore),
+      handwritingScore: String(handwritingScore),
+      cleanliness: getCoCurricularGrade(dPct),
+      discipline: getCoCurricularGrade((hwPct + attPct) / 2),
+      handwriting: getCoCurricularGrade(hwPct),
+      sportsAndGames: getCoCurricularGrade(attPct),
+    };
+  }
+
+  // Calculate target student's continuous assessment stats
+  const myContT1 = await getStudentContinuousAssessment(student.id, maxContinuousMarks, 1);
+  const myContT2 = await getStudentContinuousAssessment(student.id, maxContinuousMarks, 2);
+  const myContT3 = await getStudentContinuousAssessment(student.id, maxContinuousMarks, 3);
+  const myCont = await getStudentContinuousAssessment(student.id, maxContinuousMarks);
+
+  // Term Continuous Scores:
+  const t1ContScore = t1TotalSum > 0 ? myContT1.score10 : null;
+  const t2ContScore = t2TotalSum > 0 ? myContT2.score10 : null;
+  const t3ContScore = t3TotalSum > 0 ? myContT3.score10 : null;
+
+  // Final Result Continuous breakdown:
+  const finalT1Cont30 = t1ContScore !== null ? Math.round((t1ContScore * 0.3) * 10) / 10 : null;
+  const finalT2Cont30 = t2ContScore !== null ? Math.round((t2ContScore * 0.3) * 10) / 10 : null;
+  const finalT3Cont40 = t3ContScore !== null ? Math.round((t3ContScore * 0.4) * 10) / 10 : null;
+
+  let finalContScore10: number | null = null;
+  if (finalT1Cont30 !== null || finalT2Cont30 !== null || finalT3Cont40 !== null) {
+    finalContScore10 = Math.round(((finalT1Cont30 || 0) + (finalT2Cont30 || 0) + (finalT3Cont40 || 0)) * 10) / 10;
+  }
+
+  // 7. Calculate Class Position (Ranks) based on Grand Total (90% Subject Exam + 10% Continuous Assessment)
   const term1Ranks: { stuId: string; total: number }[] = [];
   const term2Ranks: { stuId: string; total: number }[] = [];
   const term3Ranks: { stuId: string; total: number }[] = [];
@@ -346,11 +466,23 @@ export async function generateComprehensiveMarksheet(
       s3Tot += s3;
     }
 
+    const otherCont = await getStudentContinuousAssessment(otherStuId, maxContinuousMarks);
+
+    const s1Academic = Math.round(s1Tot * 10) / 10;
+    const s2Academic = Math.round(s2Tot * 10) / 10;
+    const s3Academic = Math.round(s3Tot * 10) / 10;
+
+    const s1Grand = s1Tot > 0 ? Math.round((s1Academic + (otherCont.score10 || 0)) * 10) / 10 : 0;
+    const s2Grand = s2Tot > 0 ? Math.round((s2Academic + (otherCont.score10 || 0)) * 10) / 10 : 0;
+    const s3Grand = s3Tot > 0 ? Math.round((s3Academic + (otherCont.score10 || 0)) * 10) / 10 : 0;
+
     const fTot = Math.round((s1Tot * 0.3 + s2Tot * 0.3 + s3Tot * 0.4) * 10) / 10;
-    term1Ranks.push({ stuId: otherStuId, total: s1Tot });
-    term2Ranks.push({ stuId: otherStuId, total: s2Tot });
-    term3Ranks.push({ stuId: otherStuId, total: s3Tot });
-    finalRanks.push({ stuId: otherStuId, total: fTot });
+    const fGrand = fTot > 0 ? Math.round((fTot + (otherCont.score10 || 0)) * 10) / 10 : 0;
+
+    term1Ranks.push({ stuId: otherStuId, total: s1Grand });
+    term2Ranks.push({ stuId: otherStuId, total: s2Grand });
+    term3Ranks.push({ stuId: otherStuId, total: s3Grand });
+    finalRanks.push({ stuId: otherStuId, total: fGrand });
   }
 
   function getRank(list: { stuId: string; total: number }[], targetStuId: string): number {
@@ -364,59 +496,29 @@ export async function generateComprehensiveMarksheet(
   const posTerm3 = getRank(term3Ranks, student.id);
   const posFinal = getRank(finalRanks, student.id);
 
-  // 8. Fetch attendance counts for student
-  const attendanceRecords = await prisma.attendanceRecord.findMany({
-    where: { studentId: student.id },
-    include: { attendanceSession: true },
-  });
-
-  const totalWorkingDays = attendanceRecords.length || 180;
-  const presentDays =
-    attendanceRecords.filter(
-      (r) => r.status === 'PRESENT' || r.status === 'LATE'
-    ).length || Math.min(168, totalWorkingDays);
-
-  // Auto-calculate Cleanliness and Discipline from Dressup, Homework & Attendance %
-  let homeworkCount = 0;
-  let dressupScore = 0;
-  for (const r of attendanceRecords) {
-    let hasHw = true;
-    let dUp = 'PERFECT';
-    if (r.remarks) {
-      try {
-        const p = JSON.parse(r.remarks);
-        if (typeof p.hasHomework === 'boolean') hasHw = p.hasHomework;
-        if (p.dressup) dUp = p.dressup;
-      } catch {}
-    }
-    if (hasHw) homeworkCount++;
-    if (dUp === 'PERFECT') dressupScore += 1.0;
-    else if (dUp === 'MODERATE') dressupScore += 0.6;
-  }
-
-  const dressupPct = attendanceRecords.length > 0 ? (dressupScore / attendanceRecords.length) * 100 : 90;
-  const homeworkPct = attendanceRecords.length > 0 ? (homeworkCount / attendanceRecords.length) * 100 : 90;
-  const attendancePct = totalWorkingDays > 0 ? (presentDays / totalWorkingDays) * 100 : 90;
-
-  const getCoCurricularGrade = (percentage: number) => {
-    if (percentage >= 80) return 'A';
-    if (percentage >= 65) return 'B';
-    if (percentage >= 50) return 'C';
-    return 'D';
-  };
-
-  const calculatedCleanliness = getCoCurricularGrade(dressupPct);
-  const calculatedDiscipline = getCoCurricularGrade((homeworkPct + attendancePct) / 2);
-  const calculatedHandwriting = getCoCurricularGrade(homeworkPct);
-  const calculatedSports = getCoCurricularGrade(attendancePct);
-
-  // 9. Fetch or find existing Marksheet record for co-curricular & remarks
+  // 8. Fetch or find existing Marksheet record for co-curricular & remarks
   let marksheet = await prisma.marksheet.findFirst({
     where: {
       studentId: student.id,
       classSectionId: targetSectionId,
     },
   });
+
+  function toLetterGrade(val: string | number | null | undefined): string {
+    if (!val) return 'A';
+    const str = String(val).trim();
+    if (['A+', 'A', 'B', 'C', 'D'].includes(str)) return str;
+    const num = parseFloat(str);
+    if (!isNaN(num)) {
+      const pct = num <= 10 ? num * 10 : num;
+      if (pct >= 90) return 'A+';
+      if (pct >= 80) return 'A';
+      if (pct >= 70) return 'B';
+      if (pct >= 60) return 'C';
+      return 'D';
+    }
+    return 'A';
+  }
 
   if (!marksheet) {
     // Generate a default official marksheet number and token
@@ -431,26 +533,48 @@ export async function generateComprehensiveMarksheet(
         academicSessionId: session.id,
         marksheetNumber: msNum,
         verificationToken: token,
-        discipline: calculatedDiscipline,
-        sportsAndGames: calculatedSports,
-        cleanliness: calculatedCleanliness,
-        handwriting: calculatedHandwriting,
+        discipline: myCont.disciplineScore,
+        sportsAndGames: toLetterGrade(myCont.sportsAndGames || myCont.sportsScore),
+        cleanliness: myCont.cleanlinessScore,
+        handwriting: myCont.handwritingScore,
         teacherRemarks: 'Satisfactory academic and co-curricular performance.',
         promotionStatus: 'PROMOTED',
       },
     });
   } else {
-    // Keep updated based on real-time term percentages
+    // Keep updated based on real-time term percentages (using 10-point scale for discipline, cleanliness, handwriting and letter grade for sports)
     marksheet = await prisma.marksheet.update({
       where: { id: marksheet.id },
       data: {
-        cleanliness: calculatedCleanliness,
-        discipline: calculatedDiscipline,
-        handwriting: calculatedHandwriting,
-        sportsAndGames: calculatedSports,
+        cleanliness: marksheet.cleanliness && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.cleanliness)
+          ? marksheet.cleanliness
+          : myCont.cleanlinessScore,
+        discipline: marksheet.discipline && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.discipline)
+          ? marksheet.discipline
+          : myCont.disciplineScore,
+        handwriting: marksheet.handwriting && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.handwriting)
+          ? marksheet.handwriting
+          : myCont.handwritingScore,
+        sportsAndGames: toLetterGrade(marksheet.sportsAndGames || myCont.sportsAndGames),
       }
     });
   }
+
+  // 100% Academic Subject Marks (Counted on 100% of subject marks: "age jemon chilo 100 er upore")
+  const t1Academic = Math.round(t1TotalSum * 10) / 10;
+  const t2Academic = Math.round(t2TotalSum * 10) / 10;
+  const t3Academic = Math.round(t3TotalSum * 10) / 10;
+  const finalAcademic = Math.round(finalGrandSum * 10) / 10;
+
+  const t1ContMarks = t1TotalSum > 0 ? (t1ContScore ?? myContT1.score10 ?? 0) : 0;
+  const t2ContMarks = t2TotalSum > 0 ? (t2ContScore ?? myContT2.score10 ?? 0) : 0;
+  const t3ContMarks = t3TotalSum > 0 ? (t3ContScore ?? myContT3.score10 ?? 0) : 0;
+  const finalContMarks = finalGrandSum > 0 ? (finalContScore10 ?? myCont.score10 ?? 0) : 0;
+
+  const t1Total = Math.round((t1Academic + t1ContMarks) * 10) / 10;
+  const t2Total = Math.round((t2Academic + t2ContMarks) * 10) / 10;
+  const t3Total = Math.round((t3Academic + t3ContMarks) * 10) / 10;
+  const finalTotal = Math.round((finalAcademic + finalContMarks) * 10) / 10;
 
   const pct = (sum: number) =>
     totalFullMarks > 0 ? Math.round((sum / totalFullMarks) * 1000) / 10 : 0;
@@ -472,43 +596,70 @@ export async function generateComprehensiveMarksheet(
     subjects: subjectRows,
     summary: {
       term1: {
-        totalMarks: Math.round(t1TotalSum * 10) / 10,
-        percentage: pct(t1TotalSum),
-        positionInClass: posTerm1,
+        academicMarks: t1TotalSum > 0 ? t1Academic : 0,
+        continuousMarks: t1TotalSum > 0 ? t1ContMarks : 0,
+        continuousScore10: t1ContScore,
+        continuousGrade: myContT1.continuousGrade,
+        totalMarks: t1TotalSum > 0 ? t1Total : 0,
+        percentage: t1TotalSum > 0 ? pct(t1Total) : 0,
+        positionInClass: t1TotalSum > 0 ? posTerm1 : null,
         totalStudents,
-        totalWorkingDays: Math.round(totalWorkingDays / 3),
-        presentDays: Math.round(presentDays / 3),
+        totalWorkingDays: myContT1.totWorking,
+        presentDays: myContT1.presDays,
       },
       term2: {
-        totalMarks: Math.round(t2TotalSum * 10) / 10,
-        percentage: pct(t2TotalSum),
-        positionInClass: posTerm2,
+        academicMarks: t2TotalSum > 0 ? t2Academic : null,
+        continuousMarks: t2TotalSum > 0 ? t2ContMarks : null,
+        continuousScore10: t2ContScore,
+        continuousGrade: t2TotalSum > 0 ? myContT2.continuousGrade : null,
+        totalMarks: t2TotalSum > 0 ? t2Total : null,
+        percentage: t2TotalSum > 0 ? pct(t2Total) : null,
+        positionInClass: t2TotalSum > 0 ? posTerm2 : null,
         totalStudents,
-        totalWorkingDays: Math.round(totalWorkingDays / 3),
-        presentDays: Math.round(presentDays / 3),
+        totalWorkingDays: t2TotalSum > 0 ? myContT2.totWorking : 0,
+        presentDays: t2TotalSum > 0 ? myContT2.presDays : 0,
       },
       term3: {
-        totalMarks: Math.round(t3TotalSum * 10) / 10,
-        percentage: pct(t3TotalSum),
-        positionInClass: posTerm3,
+        academicMarks: t3TotalSum > 0 ? t3Academic : null,
+        continuousMarks: t3TotalSum > 0 ? t3ContMarks : null,
+        continuousScore10: t3ContScore,
+        continuousGrade: t3TotalSum > 0 ? myContT3.continuousGrade : null,
+        totalMarks: t3TotalSum > 0 ? t3Total : null,
+        percentage: t3TotalSum > 0 ? pct(t3Total) : null,
+        positionInClass: t3TotalSum > 0 ? posTerm3 : null,
         totalStudents,
-        totalWorkingDays: Math.round(totalWorkingDays / 3),
-        presentDays: Math.round(presentDays / 3),
+        totalWorkingDays: t3TotalSum > 0 ? myContT3.totWorking : 0,
+        presentDays: t3TotalSum > 0 ? myContT3.presDays : 0,
       },
       finalResult: {
-        totalMarks: Math.round(finalGrandSum * 10) / 10,
-        percentage: pct(finalGrandSum),
-        positionInClass: posFinal,
+        academicMarks: finalGrandSum > 0 ? finalAcademic : null,
+        continuousMarks: finalGrandSum > 0 ? finalContMarks : null,
+        continuousScore10: finalContScore10,
+        term1ContinuousScore30: finalT1Cont30,
+        term2ContinuousScore30: finalT2Cont30,
+        term3ContinuousScore40: finalT3Cont40,
+        continuousGrade: myCont.continuousGrade,
+        totalMarks: finalGrandSum > 0 ? finalTotal : null,
+        percentage: finalGrandSum > 0 ? pct(finalTotal) : null,
+        positionInClass: finalGrandSum > 0 ? posFinal : null,
         totalStudents,
-        totalWorkingDays,
-        presentDays,
+        totalWorkingDays: myCont.totWorking,
+        presentDays: myCont.presDays,
       },
     },
     coCurricular: {
-      discipline: marksheet.discipline || 'A',
-      sportsAndGames: marksheet.sportsAndGames || 'A',
-      cleanliness: marksheet.cleanliness || 'A',
-      handwriting: marksheet.handwriting || 'A',
+      discipline: marksheet.discipline && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.discipline)
+        ? marksheet.discipline
+        : myCont.disciplineScore,
+      cleanliness: marksheet.cleanliness && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.cleanliness)
+        ? marksheet.cleanliness
+        : myCont.cleanlinessScore,
+      handwriting: marksheet.handwriting && !['A+', 'A', 'B', 'C', 'D'].includes(marksheet.handwriting)
+        ? marksheet.handwriting
+        : myCont.handwritingScore,
+      sportsAndGames: toLetterGrade(marksheet.sportsAndGames || myCont.sportsAndGames),
+      continuousScore10: myCont.score10,
+      continuousGrade: myCont.continuousGrade,
       teacherRemarks: marksheet.teacherRemarks || 'Satisfactory academic progress.',
       promotionStatus: marksheet.promotionStatus || 'PROMOTED',
     },

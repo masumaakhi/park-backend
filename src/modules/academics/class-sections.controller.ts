@@ -28,7 +28,7 @@ export const getClassSections = async (req: Request, res: Response, next: NextFu
 
 export const createClassSection = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, academicSessionId, classLevelId } = req.body;
+    const { name, academicSessionId, classLevelId, roomNumber, capacity, code, isActive } = req.body;
     
     const existing = await prisma.classSection.findFirst({ 
       where: { name, academicSessionId, classLevelId } 
@@ -39,7 +39,15 @@ export const createClassSection = async (req: Request, res: Response, next: Next
     }
 
     const classSection = await prisma.classSection.create({
-      data: { name, academicSessionId, classLevelId },
+      data: { 
+        name, 
+        academicSessionId, 
+        classLevelId,
+        ...(roomNumber !== undefined && { roomNumber }),
+        ...(capacity !== undefined && capacity !== null && { capacity: Number(capacity) }),
+        ...(code !== undefined && { code }),
+        ...(isActive !== undefined && { isActive }),
+      },
       include: { 
         academicSession: true,
         classLevel: true
@@ -55,7 +63,7 @@ export const createClassSection = async (req: Request, res: Response, next: Next
 export const updateClassSection = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    const { name, isActive, academicSessionId, classLevelId } = req.body;
+    const { name, isActive, academicSessionId, classLevelId, roomNumber, capacity, code } = req.body;
     
     if (name || academicSessionId || classLevelId) {
       const existingSection = await prisma.classSection.findUnique({ where: { id } });
@@ -75,7 +83,15 @@ export const updateClassSection = async (req: Request, res: Response, next: Next
 
     const classSection = await prisma.classSection.update({
       where: { id },
-      data: { name, isActive },
+      data: { 
+        ...(name !== undefined && { name }), 
+        ...(isActive !== undefined && { isActive }),
+        ...(academicSessionId !== undefined && { academicSessionId }),
+        ...(classLevelId !== undefined && { classLevelId }),
+        ...(roomNumber !== undefined && { roomNumber }),
+        ...(capacity !== undefined && capacity !== null && { capacity: Number(capacity) }),
+        ...(code !== undefined && { code }),
+      },
       include: { 
         academicSession: true,
         classLevel: true

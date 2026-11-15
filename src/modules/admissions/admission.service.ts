@@ -15,6 +15,7 @@ import {
   DocumentReviewDto,
 } from './admission.types';
 import { recordAuditLog } from '../audit-logs/audit-log.service';
+import { parseBangladeshiAddress, formatFullAddress } from '../../utils/address-parser';
 
 export class AdmissionService {
   /**
@@ -22,9 +23,37 @@ export class AdmissionService {
    */
   static async generateApplicationNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await prisma.admissionApplication.count();
-    const sequence = (count + 1).toString().padStart(5, '0');
-    return `ADM-${year}-${sequence}`;
+    const prefix = `ADM-${year}-`;
+
+    const latestApp = await prisma.admissionApplication.findFirst({
+      where: {
+        applicationNumber: {
+          startsWith: prefix,
+        },
+      },
+      orderBy: {
+        applicationNumber: 'desc',
+      },
+    });
+
+    let sequenceNumber = 1;
+    if (latestApp && latestApp.applicationNumber) {
+      const parts = latestApp.applicationNumber.split('-');
+      if (parts.length === 3) {
+        const lastSeq = parseInt(parts[2], 10);
+        if (!isNaN(lastSeq)) {
+          sequenceNumber = lastSeq + 1;
+        }
+      }
+    }
+
+    let candidate = `${prefix}${sequenceNumber.toString().padStart(5, '0')}`;
+    while (await prisma.admissionApplication.findUnique({ where: { applicationNumber: candidate } })) {
+      sequenceNumber++;
+      candidate = `${prefix}${sequenceNumber.toString().padStart(5, '0')}`;
+    }
+
+    return candidate;
   }
 
   /**
@@ -78,6 +107,27 @@ export class AdmissionService {
   ) {
     const applicationNumber = await this.generateApplicationNumber();
 
+    // Smart address resolution: parse if only combined address provided, or format if separate fields provided
+    const parsed = parseBangladeshiAddress(data.address);
+    const presentVillage = data.presentVillage || parsed.village || null;
+    const presentPost = data.presentPost || parsed.post || null;
+    const presentUpazila = data.presentUpazila || parsed.upazila || null;
+    const presentDistrict = data.presentDistrict || parsed.district || null;
+
+    const permanentVillage = data.permanentVillage || (data.permanentDistrict ? null : presentVillage);
+    const permanentPost = data.permanentPost || (data.permanentDistrict ? null : presentPost);
+    const permanentUpazila = data.permanentUpazila || (data.permanentDistrict ? null : presentUpazila);
+    const permanentDistrict = data.permanentDistrict || (data.permanentVillage ? null : presentDistrict);
+
+    const finalAddress = data.address && data.address.trim().length > 0
+      ? data.address.trim().replace(/^["'\s]+|["'\s]+$/g, '')
+      : formatFullAddress({
+          village: presentVillage || undefined,
+          post: presentPost || undefined,
+          upazila: presentUpazila || undefined,
+          district: presentDistrict || undefined,
+        }) || 'ঠিকানা নির্ধারিত হয়নি';
+
     const application = await prisma.admissionApplication.create({
       data: {
         applicationNumber,
@@ -114,15 +164,15 @@ export class AdmissionService {
         guardianPhone: data.guardianPhone,
         guardianEmail: data.guardianEmail || null,
         guardianNidNumber: data.guardianNidNumber,
-        address: data.address,
-        presentVillage: data.presentVillage || null,
-        presentPost: data.presentPost || null,
-        presentUpazila: data.presentUpazila || null,
-        presentDistrict: data.presentDistrict || null,
-        permanentVillage: data.permanentVillage || null,
-        permanentPost: data.permanentPost || null,
-        permanentUpazila: data.permanentUpazila || null,
-        permanentDistrict: data.permanentDistrict || null,
+        address: finalAddress,
+        presentVillage: presentVillage || null,
+        presentPost: presentPost || null,
+        presentUpazila: presentUpazila || null,
+        presentDistrict: presentDistrict || null,
+        permanentVillage: permanentVillage || null,
+        permanentPost: permanentPost || null,
+        permanentUpazila: permanentUpazila || null,
+        permanentDistrict: permanentDistrict || null,
         emergencyContact: data.emergencyContact,
 
         studentPhotoUrl: data.studentPhotoUrl || null,
@@ -666,8 +716,22 @@ export class AdmissionService {
 
       // e. Create StudentDigitalId automatically
       const year = new Date().getFullYear();
-      const count = await tx.studentDigitalId.count();
-      const cardNumber = `EP-ID-${year}-${String(count + 1).padStart(5, '0')}`;
+      const idPrefix = `EP-ID-${year}-`;
+      const latestDigitalId = await tx.studentDigitalId.findFirst({
+        where: { cardNumber: { startsWith: idPrefix } },
+        orderBy: { cardNumber: 'desc' },
+      });
+      let idSeq = 1;
+      if (latestDigitalId?.cardNumber) {
+        const parts = latestDigitalId.cardNumber.split('-');
+        const lastNum = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(lastNum)) idSeq = lastNum + 1;
+      }
+      let cardNumber = `${idPrefix}${String(idSeq).padStart(5, '0')}`;
+      while (await tx.studentDigitalId.findUnique({ where: { cardNumber } })) {
+        idSeq++;
+        cardNumber = `${idPrefix}${String(idSeq).padStart(5, '0')}`;
+      }
       const verificationToken = crypto.randomBytes(24).toString('hex');
       const expiryDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
