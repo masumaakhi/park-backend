@@ -103,6 +103,20 @@ async function syncAttendanceHomeworkWithAssignments(
   }
 }
 
+// Helper to sort records by roll number
+function sortRecordsByRollNumber(records: any[]) {
+  return [...records].sort((a, b) => {
+    const rollA = a.student?.academicEnrollments?.[0]?.rollNumber || '';
+    const rollB = b.student?.academicEnrollments?.[0]?.rollNumber || '';
+    const numA = parseInt(rollA, 10);
+    const numB = parseInt(rollB, 10);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+    return rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
 const formatRecord = (r: any) => {
   let hasHomework = true;
   let dressup = 'PERFECT';
@@ -205,16 +219,23 @@ export const createAttendanceSession = async (req: Request, res: Response, next:
         records: {
           include: {
             student: {
-              include: { user: { select: { name: true } } }
+              include: {
+                user: { select: { name: true, email: true } },
+                academicEnrollments: {
+                  where: { isCurrent: true },
+                  take: 1
+                }
+              }
             }
           }
         }
       }
     });
 
+    const formattedRecords = sortRecordsByRollNumber(session.records.map(formatRecord));
     const sessionWithFormattedRecords = {
       ...session,
-      records: session.records.map(formatRecord)
+      records: formattedRecords
     };
 
     // Auto-sync attendance homework status with ClassAssignment submissions
@@ -289,17 +310,54 @@ export const getAttendanceSessionById = async (req: Request, res: Response, next
                 }
               }
             }
-          },
-          orderBy: { student: { studentId: 'asc' } }
+          }
         }
       }
     });
 
     if (!session) throw new AppError('Attendance session not found or access denied', 404);
 
+    // Find any currently enrolled active students who do not yet have an attendance record for this session
+    const activeEnrollments = await prisma.studentEnrollment.findMany({
+      where: {
+        classSectionId: session.classSectionId,
+        isCurrent: true,
+        status: 'ACTIVE'
+      },
+      include: {
+        student: {
+          include: {
+            user: { select: { name: true, email: true } },
+            academicEnrollments: {
+              where: { isCurrent: true },
+              take: 1
+            }
+          }
+        }
+      },
+      orderBy: { rollNumber: 'asc' }
+    });
+
+    const existingStudentIds = new Set(session.records.map(r => r.studentId));
+    const unrecordedStudents = activeEnrollments
+      .filter(e => !existingStudentIds.has(e.studentId))
+      .map(e => ({
+        id: null, // No database record yet until teacher marks and saves
+        studentId: e.studentId,
+        student: e.student,
+        status: 'ABSENT',
+        hasHomework: false,
+        dressup: 'PERFECT',
+        isNewStudent: true
+      }));
+
+    const formattedRecords = sortRecordsByRollNumber(session.records.map(formatRecord));
+    const formattedUnrecorded = sortRecordsByRollNumber(unrecordedStudents);
+
     const formattedSession = {
       ...session,
-      records: session.records.map(formatRecord)
+      records: formattedRecords,
+      unrecordedStudents: formattedUnrecorded
     };
 
     res.status(200).json(new ApiResponse(true, 'Session fetched successfully', { session: formattedSession }));
@@ -315,7 +373,7 @@ export const updateAttendanceSession = async (req: Request, res: Response, next:
     if (!teacher) throw new AppError('Teacher not found', 404);
 
     const sessionId = req.params.sessionId as string;
-    const { records } = req.body; // Array of { id, status, hasHomework, dressup, remarks }
+    const { records } = req.body; // Array of { id, studentId, status, hasHomework, dressup, remarks }
 
     const session = await prisma.attendanceSession.findFirst({
       where: { id: sessionId, createdByTeacherId: teacher.id }
@@ -323,27 +381,54 @@ export const updateAttendanceSession = async (req: Request, res: Response, next:
 
     if (!session) throw new AppError('Attendance session not found', 404);
 
-    // Teachers can edit attendance anytime (not locked)
-    // if (session.status === AttendanceSessionStatus.LOCKED) {
-    //   throw new AppError('This attendance session is locked and cannot be edited', 400);
-    // }
-
     if (Array.isArray(records)) {
-      await prisma.$transaction(
-        records.map((r: any) => {
-          const hasHomework = typeof r.hasHomework === 'boolean' ? r.hasHomework : true;
-          const dressup = r.dressup || 'PERFECT';
-          const remarks = JSON.stringify({ hasHomework, dressup });
+      const updateOps = records.map((r: any) => {
+        const hasHomework = typeof r.hasHomework === 'boolean' ? r.hasHomework : true;
+        const dressup = r.dressup || 'PERFECT';
+        const remarks = JSON.stringify({ hasHomework, dressup });
+        const status = (r.status === 'ABSENT' ? 'ABSENT' : 'PRESENT') as AttendanceStatus;
 
-          return prisma.attendanceRecord.update({
+        if (r.id) {
+          return prisma.attendanceRecord.upsert({
             where: { id: r.id },
-            data: {
-              status: (r.status === 'ABSENT' ? 'ABSENT' : 'PRESENT') as AttendanceStatus,
+            update: {
+              status,
+              remarks
+            },
+            create: {
+              id: r.id,
+              attendanceSessionId: sessionId,
+              studentId: r.studentId,
+              status,
               remarks
             }
           });
-        })
-      );
+        } else if (r.studentId) {
+          return prisma.attendanceRecord.upsert({
+            where: {
+              attendanceSessionId_studentId: {
+                attendanceSessionId: sessionId,
+                studentId: r.studentId
+              }
+            },
+            update: {
+              status,
+              remarks
+            },
+            create: {
+              attendanceSessionId: sessionId,
+              studentId: r.studentId,
+              status,
+              remarks
+            }
+          });
+        }
+        return null;
+      }).filter(Boolean);
+
+      if (updateOps.length > 0) {
+        await prisma.$transaction(updateOps as any[]);
+      }
 
       // Auto-sync attendance homework status with ClassAssignment submissions
       await syncAttendanceHomeworkWithAssignments(
@@ -357,13 +442,60 @@ export const updateAttendanceSession = async (req: Request, res: Response, next:
       where: { id: sessionId },
       include: {
         records: {
-          include: { student: { include: { user: { select: { name: true } } } } }
+          include: {
+            student: {
+              include: {
+                user: { select: { name: true, email: true } },
+                academicEnrollments: {
+                  where: { isCurrent: true },
+                  take: 1
+                }
+              }
+            }
+          }
         }
       }
     });
 
+    const activeEnrollments = await prisma.studentEnrollment.findMany({
+      where: {
+        classSectionId: session.classSectionId,
+        isCurrent: true,
+        status: 'ACTIVE'
+      },
+      include: {
+        student: {
+          include: {
+            user: { select: { name: true, email: true } },
+            academicEnrollments: {
+              where: { isCurrent: true },
+              take: 1
+            }
+          }
+        }
+      },
+      orderBy: { rollNumber: 'asc' }
+    });
+
+    const existingStudentIds = new Set(updated?.records.map(r => r.studentId) || []);
+    const unrecordedStudents = activeEnrollments
+      .filter(e => !existingStudentIds.has(e.studentId))
+      .map(e => ({
+        id: null,
+        studentId: e.studentId,
+        student: e.student,
+        status: 'ABSENT',
+        hasHomework: false,
+        dressup: 'PERFECT',
+        isNewStudent: true
+      }));
+
     const formattedUpdated = updated
-      ? { ...updated, records: updated.records.map(formatRecord) }
+      ? {
+          ...updated,
+          records: sortRecordsByRollNumber(updated.records.map(formatRecord)),
+          unrecordedStudents: sortRecordsByRollNumber(unrecordedStudents)
+        }
       : updated;
 
     res.status(200).json(new ApiResponse(true, 'Attendance draft updated successfully', { session: formattedUpdated }));

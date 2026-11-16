@@ -6,6 +6,7 @@ import {
   AdmissionStatus,
   AdmissionDocumentType,
   AdmissionDocumentStatus,
+  AttendanceStatus,
   Prisma,
 } from '@prisma/client';
 import {

@@ -234,18 +234,6 @@ export const saveExamSubjectMarks = async (req: Request, res: Response, next: Ne
 
     const maxMarks = examSubject.fullMarks || 100;
 
-    // Check if any mark is already submitted and locked
-    const existingSubmitted = await prisma.studentMark.findFirst({
-      where: {
-        examSubjectId: examSubjectId as string,
-        status: MarksEntryStatus.SUBMITTED
-      }
-    });
-
-    if (existingSubmitted) {
-      throw new AppError('Marks for this subject have already been submitted. Contact admin to reopen.', 400);
-    }
-
     // Upsert marks in transaction
     await prisma.$transaction(
       marks.map((m: any) => {

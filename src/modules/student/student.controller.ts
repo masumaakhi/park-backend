@@ -35,7 +35,7 @@ async function getAuthenticatedStudent(userId?: string) {
   const student = await prisma.student.findUnique({
     where: { userId },
     include: {
-      user: { select: { id: true, name: true, email: true, isActive: true } },
+      user: { select: { id: true, name: true, email: true, isActive: true, mustChangePassword: true } },
       academicEnrollments: {
         where: { isCurrent: true, status: 'ACTIVE' },
         include: {
@@ -235,6 +235,7 @@ export const getStudentDashboard = async (req: Request, res: Response, next: Nex
         name: student.user.name,
         email: student.user.email,
         studentId: student.studentId,
+        mustChangePassword: Boolean((student.user as any).mustChangePassword),
         profileImage: resolvedPhoto,
         phone: student.phone,
         rollNumber: currentEnrollment?.rollNumber || null,
@@ -284,6 +285,7 @@ export const getStudentProfile = async (req: Request, res: Response, next: NextF
         name: student.user.name,
         email: student.user.email,
         studentId: student.studentId,
+        mustChangePassword: Boolean((student.user as any).mustChangePassword),
         phone: student.phone,
         address: student.address,
         guardianName: student.guardianName,

@@ -477,9 +477,13 @@ export const viewAdmissionDocument = async (
     const filePath = StorageService.getPrivateFilePath(doc.fileUrl);
     if (!filePath) {
       if (doc.mimeType?.startsWith('image/')) {
-        const svgPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
+        const isPhoto = doc.documentType === 'STUDENT_PHOTO';
+        const svgPlaceholder = isPhoto
+          ? `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240" fill="#f8fafc"><rect width="200" height="240" fill="#f1f5f9"/><circle cx="100" cy="85" r="45" fill="#cbd5e1"/><path d="M30 210 C30 155, 170 155, 170 210 Z" fill="#cbd5e1"/><text x="100" y="230" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="12" font-weight="600">Student Photo</text></svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
         res.setHeader('Content-Type', 'image/svg+xml');
         res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         return res.send(svgPlaceholder);
       }
       return res.status(404).json(new ApiResponse(false, 'Document file not found on disk'));
@@ -534,9 +538,13 @@ export const downloadAdmissionDocument = async (
     const filePath = StorageService.getPrivateFilePath(doc.fileUrl);
     if (!filePath) {
       if (doc.mimeType?.startsWith('image/')) {
-        const svgPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
+        const isPhoto = doc.documentType === 'STUDENT_PHOTO';
+        const svgPlaceholder = isPhoto
+          ? `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240" fill="#f8fafc"><rect width="200" height="240" fill="#f1f5f9"/><circle cx="100" cy="85" r="45" fill="#cbd5e1"/><path d="M30 210 C30 155, 170 155, 170 210 Z" fill="#cbd5e1"/><text x="100" y="230" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="12" font-weight="600">Student Photo</text></svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="#f8fafc"><rect width="600" height="400" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/><text x="50%" y="45%" text-anchor="middle" fill="#0f2f4a" font-family="sans-serif" font-size="18" font-weight="bold">Document On File</text><text x="50%" y="55%" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="14">${doc.fileName || 'Document'}</text><text x="50%" y="65%" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Type: ${doc.documentType} (Archived)</text></svg>`;
         res.setHeader('Content-Type', 'image/svg+xml');
         res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         return res.send(svgPlaceholder);
       }
       return res.status(404).json(new ApiResponse(false, 'Document file not found on disk'));

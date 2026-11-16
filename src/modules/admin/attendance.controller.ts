@@ -10,7 +10,7 @@ export const getAttendanceSessions = async (req: Request, res: Response, next: N
     const sessions = await prisma.attendanceSession.findMany({
       include: {
         teacher: { include: { user: { select: { name: true } } } },
-        
+        classSection: { include: { classLevel: true } },
         teacherSubjectAssignment: {
           include: {
             subject: { select: { name: true, code: true } }
@@ -36,9 +36,27 @@ export const getAttendanceSessionRecords = async (req: Request, res: Response, n
       where: { attendanceSessionId: id },
       include: {
         student: {
-          include: { user: { select: { name: true, email: true } } }
+          include: {
+            user: { select: { name: true, email: true } },
+            academicEnrollments: {
+              where: { isCurrent: true },
+              take: 1
+            }
+          }
         }
       }
+    });
+
+    // Sort by roll number
+    records.sort((a, b) => {
+      const rollA = a.student?.academicEnrollments?.[0]?.rollNumber || '';
+      const rollB = b.student?.academicEnrollments?.[0]?.rollNumber || '';
+      const numA = parseInt(rollA, 10);
+      const numB = parseInt(rollB, 10);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
     });
 
     res.status(200).json(new ApiResponse(true, 'Attendance records fetched successfully', { records }));
