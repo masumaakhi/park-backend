@@ -47,6 +47,14 @@ export interface ComprehensiveMarksheetData {
   marksheetNumber: string;
   verificationToken: string;
   issuedAt: string;
+  availableSessions?: {
+    id: string;
+    name: string;
+    classLevel: string;
+    classSection: string;
+    rollNumber: string | null;
+    isCurrent: boolean;
+  }[];
   student: {
     id: string;
     studentId: string;
@@ -55,6 +63,7 @@ export interface ComprehensiveMarksheetData {
     classLevel: string;
     classSection: string;
     sessionName: string;
+    sessionId?: string;
     profileImage: string | null;
   };
   subjects: MarksheetSubjectRow[];
@@ -96,15 +105,15 @@ export interface ComprehensiveMarksheetData {
  */
 export async function generateComprehensiveMarksheet(
   studentId: string,
-  classSectionId?: string
+  classSectionId?: string,
+  sessionId?: string
 ): Promise<ComprehensiveMarksheetData | null> {
-  // 1. Fetch student and active enrollment
+  // 1. Fetch student and all academic enrollments (active and historical)
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
       user: { select: { name: true, email: true } },
       academicEnrollments: {
-        where: { isCurrent: true },
         include: {
           classSection: {
             include: {
@@ -113,16 +122,31 @@ export async function generateComprehensiveMarksheet(
             },
           },
         },
-        take: 1,
+        orderBy: [{ isCurrent: 'desc' }, { createdAt: 'desc' }],
       },
     },
   });
 
-  if (!student || !student.academicEnrollments[0]) {
+  if (!student || student.academicEnrollments.length === 0) {
     return null;
   }
 
-  const enrollment = student.academicEnrollments[0];
+  // Determine target enrollment
+  let enrollment = null;
+  if (classSectionId) {
+    enrollment = student.academicEnrollments.find((e) => e.classSectionId === classSectionId);
+  }
+  if (!enrollment && sessionId) {
+    enrollment = student.academicEnrollments.find((e) => e.academicSessionId === sessionId);
+  }
+  if (!enrollment) {
+    enrollment = student.academicEnrollments.find((e) => e.isCurrent) || student.academicEnrollments[0];
+  }
+
+  if (!enrollment) {
+    return null;
+  }
+
   const section = enrollment.classSection;
   const targetSectionId = classSectionId || section.id;
   const session = section.academicSession;
@@ -134,12 +158,10 @@ export async function generateComprehensiveMarksheet(
     orderBy: { name: 'asc' },
   });
 
-  // 3. Fetch all active students enrolled in this section to calculate rank & highest marks
+  // 3. Fetch all students enrolled in this section (both active and historical) to calculate rank & highest marks
   const allSectionEnrollments = await prisma.studentEnrollment.findMany({
     where: {
       classSectionId: targetSectionId,
-      isCurrent: true,
-      status: 'ACTIVE',
     },
     select: { studentId: true, rollNumber: true },
   });
@@ -500,7 +522,10 @@ export async function generateComprehensiveMarksheet(
   let marksheet = await prisma.marksheet.findFirst({
     where: {
       studentId: student.id,
-      classSectionId: targetSectionId,
+      OR: [
+        { classSectionId: targetSectionId },
+        { academicSessionId: session.id },
+      ],
     },
   });
 
@@ -583,6 +608,14 @@ export async function generateComprehensiveMarksheet(
     marksheetNumber: marksheet.marksheetNumber,
     verificationToken: marksheet.verificationToken,
     issuedAt: marksheet.issuedAt.toISOString(),
+    availableSessions: student.academicEnrollments.map((e) => ({
+      id: e.academicSessionId,
+      name: e.classSection.academicSession.name,
+      classLevel: e.classSection.classLevel.name,
+      classSection: e.classSection.name,
+      rollNumber: e.rollNumber,
+      isCurrent: e.isCurrent,
+    })),
     student: {
       id: student.id,
       studentId: student.studentId,
@@ -591,6 +624,7 @@ export async function generateComprehensiveMarksheet(
       classLevel: classLevel.name,
       classSection: section.name,
       sessionName: session.name,
+      sessionId: session.id,
       profileImage: student.profileImage,
     },
     subjects: subjectRows,

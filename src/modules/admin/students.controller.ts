@@ -17,7 +17,6 @@ export const getStudents = async (req: Request, res: Response, next: NextFunctio
             classSection: true,
             academicSession: true,
           },
-          where: { status: 'ACTIVE' },
           orderBy: [{ isCurrent: 'desc' }, { createdAt: 'desc' }],
         },
       },

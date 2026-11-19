@@ -177,11 +177,12 @@ export const deleteMarksheet = async (req: Request, res: Response, next: NextFun
 export const getComprehensiveMarksheetHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { studentId } = req.params;
-    const { classSectionId } = req.query;
+    const { classSectionId, sessionId } = req.query;
 
     const data = await generateComprehensiveMarksheet(
       studentId as string,
-      classSectionId as string | undefined
+      classSectionId as string | undefined,
+      sessionId as string | undefined
     );
 
     if (!data) {
@@ -196,16 +197,34 @@ export const getComprehensiveMarksheetHandler = async (req: Request, res: Respon
 
 export const updateCoCurricularMarksheetHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { studentId, classSectionId, discipline, sportsAndGames, cleanliness, handwriting, teacherRemarks, promotionStatus } = req.body;
+    const { studentId, classSectionId, sessionId, discipline, sportsAndGames, cleanliness, handwriting, teacherRemarks, promotionStatus } = req.body;
 
     if (!studentId) throw new AppError('studentId is required', 400);
 
+    const whereClause: any = {
+      studentId: studentId as string,
+    };
+    if (classSectionId) {
+      whereClause.classSectionId = classSectionId as string;
+    } else if (sessionId) {
+      whereClause.academicSessionId = sessionId as string;
+    }
+
     let marksheet = await prisma.marksheet.findFirst({
-      where: {
-        studentId: studentId as string,
-        classSectionId: classSectionId as string | undefined,
-      },
+      where: whereClause,
     });
+
+    if (!marksheet && (classSectionId || sessionId)) {
+      marksheet = await prisma.marksheet.findFirst({
+        where: {
+          studentId: studentId as string,
+          OR: [
+            classSectionId ? { classSectionId: classSectionId as string } : {},
+            sessionId ? { academicSessionId: sessionId as string } : {}
+          ].filter((c) => Object.keys(c).length > 0)
+        }
+      });
+    }
 
     if (marksheet) {
       marksheet = await prisma.marksheet.update({
@@ -227,6 +246,7 @@ export const updateCoCurricularMarksheetHandler = async (req: Request, res: Resp
         data: {
           studentId: studentId as string,
           classSectionId: classSectionId as string | undefined,
+          academicSessionId: sessionId as string | undefined,
           marksheetNumber: msNum,
           verificationToken: token,
           discipline: discipline || 'A',

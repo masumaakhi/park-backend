@@ -15,6 +15,7 @@ import auditLogRoutes from './audit-logs.routes';
 import settingsRoutes from './settings.routes';
 import marksheetRoutes from './marksheets.routes';
 import resultsRoutes from './results.routes';
+import promotionRoutes from './promotions.routes';
 import { adminAdmissionRouter } from '../admissions/admission.routes';
 import { adminTeacherRecruitmentRouter } from '../teacher-recruitment/teacher-recruitment.routes';
 import teacherAppointmentRoutes from '../teacher-appointments/teacher-appointments.routes';
@@ -47,5 +48,6 @@ router.use('/audit-logs', auditLogRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/marksheets', marksheetRoutes);
 router.use('/results', resultsRoutes);
+router.use('/promotions', promotionRoutes);
 
 export default router;

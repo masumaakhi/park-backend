@@ -409,7 +409,9 @@ export const getStudentAcademicHistory = async (req: Request, res: Response, nex
     res.status(200).json(new ApiResponse(true, 'Academic history fetched', {
       history: allEnrollments.map(e => ({
         id: e.id,
+        sessionId: e.academicSessionId,
         session: e.academicSession.name,
+        sessionName: e.academicSession.name,
         classLevel: e.classLevel.name,
         classSection: e.classSection.name,
         rollNumber: e.rollNumber,
@@ -768,13 +770,23 @@ export const getStudentResultById = async (req: Request, res: Response, next: Ne
 export const getStudentMarksheets = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { student } = await getAuthenticatedStudent(req.user?.id);
+    const { sessionId } = req.query;
+
+    const where: any = {
+      studentId: student.id,
+      isActive: true,
+      exam: { isPublished: true, status: ExamStatus.PUBLISHED }
+    };
+
+    if (sessionId && typeof sessionId === 'string') {
+      where.exam = {
+        ...where.exam,
+        academicSessionId: sessionId
+      };
+    }
 
     const marksheets = await prisma.marksheet.findMany({
-      where: {
-        studentId: student.id,
-        isActive: true,
-        exam: { isPublished: true, status: ExamStatus.PUBLISHED }
-      },
+      where,
       include: {
         exam: {
           include: {
@@ -797,7 +809,13 @@ export const getStudentMarksheets = async (req: Request, res: Response, next: Ne
 export const getStudentComprehensiveMarksheet = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { student } = await getAuthenticatedStudent(req.user?.id);
-    const data = await generateComprehensiveMarksheet(student.id);
+    const { sessionId, classSectionId } = req.query;
+
+    const data = await generateComprehensiveMarksheet(
+      student.id,
+      classSectionId as string | undefined,
+      sessionId as string | undefined
+    );
 
     if (!data) {
       throw new AppError('Comprehensive marksheet not found or not yet generated', 404);
